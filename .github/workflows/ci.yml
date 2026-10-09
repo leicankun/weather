@@ -6,7 +6,7 @@
 #
 # 分三个层次，由快到慢、由便宜到贵：
 #   1. lint      几秒钟   —— 格式、未使用变量、明显的坏味道
-#   2. test      几分钟   —— 442 个用例（后端 379 + 前端单测 41 + E2E 由本地/部署后跑）
+#   2. test      几分钟   —— 后端测试、Vue 单元测试、浏览器契约回归
 #   3. build     几分钟   —— 四个镜像能不能构建出来
 #
 # 为什么 lint 和 test 拆成不同 job：
@@ -192,6 +192,9 @@ jobs:
             frontend-user/package-lock.json
             frontend-admin/package-lock.json
 
+      - name: 检查两端无 TypeScript 源码
+        run: node scripts/check-javascript.mjs
+
       # ---------- 用户端 ----------
       - name: 用户端 · 安装依赖
         working-directory: frontend-user
@@ -205,16 +208,22 @@ jobs:
         working-directory: frontend-user
         run: npm run test
 
-      - name: 用户端 · 构建（含 TypeScript 类型检查）
+      - name: 用户端 · Vue JavaScript 构建
         working-directory: frontend-user
         run: npm run build
+
+      - name: 用户端 · 浏览器契约回归
+        working-directory: frontend-user
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
 
       # ---------- 管理端 ----------
       - name: 管理端 · 安装依赖
         working-directory: frontend-admin
         run: npm ci
 
-      - name: 管理端 · 构建（含 vue-tsc 类型检查）
+      - name: 管理端 · Vue JavaScript 构建
         working-directory: frontend-admin
         run: npm run build
 
@@ -251,19 +260,19 @@ jobs:
           - name: backend
             context: ./backend
             file: ./backend/Dockerfile
-            image: ghcr.io/ticnix/weather-backend
+            image: ghcr.io/${{ github.repository_owner }}/weather-backend
           - name: frontend-user
             context: ./frontend-user
             file: ./frontend-user/Dockerfile
-            image: ghcr.io/ticnix/weather-frontend-user
+            image: ghcr.io/${{ github.repository_owner }}/weather-frontend-user
           - name: frontend-admin
             context: ./frontend-admin
             file: ./frontend-admin/Dockerfile
-            image: ghcr.io/ticnix/weather-frontend-admin
+            image: ghcr.io/${{ github.repository_owner }}/weather-frontend-admin
           - name: postgres
             context: .
             file: ./Dockerfile.pg
-            image: ghcr.io/ticnix/weather-pg
+            image: ghcr.io/${{ github.repository_owner }}/weather-pg
             fixed_tag: pg17
     steps:
       - uses: actions/checkout@v4

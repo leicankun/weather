@@ -1,49 +1,15 @@
 # AGENTS.md
 
-广州天气旅行助手 —— 天气 × 行程的个性化推荐系统（FastAPI + React + TimescaleDB + 多智能体）。
+天气与出行助手。后端 Python / FastAPI / PostgreSQL；两个前端均 Vue 3 / JavaScript。
 
-**本文件只告诉你去哪找信息，细节一律看对应文档。**
-
-## 常用命令
-
-| 用途 | 命令 |
-| --- | --- |
-| 启动全套 | `docker compose up -d --build` |
-| 后端测试 | `docker compose exec -T backend pytest -q` |
-| 前端类型检查 | `cd frontend-user && tsc -b`（**必须过**，IDE lint 比 tsc 松） |
-| 前端单元测试 | `cd frontend-user && npm test` |
-| Lint | `ruff check backend/app` / `npm run lint` |
-| 数据库迁移 | `docker compose run --rm backend alembic upgrade head` |
-| 本地前端开发 | `npm run dev`（API 代理默认 8000，见 vite.config.ts） |
-
-## 目录地图
-
-| 要找什么 | 去哪 |
-| --- | --- |
-| 架构、模块边界、外部依赖、数据流 | [docs/architecture.md](docs/architecture.md) |
-| 测试怎么跑、验证清单 | [docs/testing.md](docs/testing.md) |
-| 代码规范（前后端约定与已知陷阱） | [docs/coding-style.md](docs/coding-style.md) |
-| 功能清单、竞争优势 | [docs/product/features.md](docs/product/features.md) |
-| 待办与规划 | [docs/product/roadmap.md](docs/product/roadmap.md) |
-| 部署步骤 | [docs/runbooks/deploy.md](docs/runbooks/deploy.md) |
-| 故障处置（Docker/网络） | [docs/runbooks/](docs/runbooks/) |
-| 关键技术决策及原因 | [docs/decisions/](docs/decisions/) |
-| 全部历史：28 天开发日志、踩坑记录 | [docs/history/](docs/history/)（原 28天开发计划.md / 工作日志.md / 知识点剖析.md） |
-| 运维/部署脚本 | `scripts/`（deploy.sh、deploy-ecs.sh、dev-user.ps1、start-public.ps1，均已自动定位仓库根） |
-| 面试/求职材料 | [博客/](博客/)、[docs/learning/](docs/learning/)（含简历项目经历） |
-
-## Done criteria
-
-一个功能算"完成"必须同时满足：
-
-1. `tsc -b` 与 `ruff check` 通过；
-2. **真实调用过接口或页面**（静态检查会漏掉 NameError / 响应解包层级 / antd v6 API 差异，历史教训见 docs/coding-style.md）；
-3. 有数据竞态的接口写了并发测试；
-4. 文档同步（本目录对应文件 + history 补一段）；
-5. `git add -A && git commit`（身份已是 Ticnix，见仓库级 git config）。
-
-## 三条铁律（踩过坑的）
-
-1. **改完必须真跑一次**——静态检查全过也可能 NameError/500；
-2. **新文件落盘前先确认不存在**（write 会静默覆盖，recommend.py 曾被这样覆盖）；
-3. **恢复文件只用 `git checkout --`**，PowerShell 重定向会写出 UTF-16。
+- 当前架构：docs/architecture.md；启动：docs/LOCAL_SETUP.md；测试：docs/testing.md。
+- 修改前阅读相关代码，确认新文件是否已存在。不得覆盖本地 .env。
+- 前端检查：根目录 `npm run check:js`、`npm --prefix frontend-user run lint`、`npm test`、`npm run build`。
+- 浏览器验证：`npm run test:e2e`。契约测试使用 mock，仍须按需验证真实 API。
+- 后端：`python -m ruff check .`、`python -m ruff format --check .`、`python -m pytest`（backend 目录）。
+- 无 PostgreSQL 时可执行 `python -m pytest --no-db -o addopts= -q`，须明确报告跳过的集成测试。
+- TypeScript 已按用户要求移除，不再执行 tsc/vue-tsc，不引入 .ts/.tsx 或 script lang=ts。
+- API 返回 `{code,message,data}`；前端 api/http.js 已解包一次。
+- 新表同步 models/__init__.py 和 Alembic 迁移；涉及并发数据更新需相应测试。
+- 完成改动后运行相关检查、实际调用接口或页面，更新文档和验证记录。
+- 使用实际配置的 Git 身份创建本地提交，不冒用上游作者身份，不推送上游。

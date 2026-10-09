@@ -485,7 +485,7 @@ async def chat_stream_with_images(
             user_input, image_urls, system=VISION_SYSTEM_PROMPT, provider=provider, model=model
         ):
             yield {"type": "token", "content": piece}
-    except Exception as exc:  # noqa: BLE001 视觉模型不可用不该让整条流断掉
+    except Exception as exc:
         logger.exception("视觉模型调用失败 provider=%s model=%s: %s", provider, model, exc)
         # 把上游的真实原因翻成人话：同样是"图片失败"，
         # Key 无效 / 模型名不对 / 限流 的处理方式完全不同

@@ -42,13 +42,15 @@ async def _transcribe_openai(raw: bytes, filename: str, mime: str) -> str:
     data = {"model": settings.ASR_MODEL}
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(url, files=files, data=data, headers={"Authorization": f"Bearer {api_key}"})
+            resp = await client.post(
+                url, files=files, data=data, headers={"Authorization": f"Bearer {api_key}"}
+            )
             resp.raise_for_status()
             payload = resp.json()
     except httpx.HTTPStatusError as exc:
         body = (exc.response.text or "")[:200]
         raise ValueError(f"语音转写服务返回 {exc.response.status_code}：{body}") from exc
-    except Exception as exc:  # noqa: BLE001 网络问题不该让整个上传 500
+    except Exception as exc:
         raise ValueError(f"语音转写服务不可用：{type(exc).__name__}") from exc
 
     text = (payload.get("text") or "").strip()
@@ -78,13 +80,11 @@ def _transcribe_local_sync(raw: bytes) -> str:
     import io
 
     try:
-        segments, _info = _whisper_model.transcribe(
-            io.BytesIO(raw), language="zh", vad_filter=True
-        )
+        segments, _info = _whisper_model.transcribe(io.BytesIO(raw), language="zh", vad_filter=True)
         text = "".join(segment.text for segment in segments).strip()
     except ValueError:
         raise
-    except Exception as exc:  # noqa: BLE001 解码失败 ≠ 服务坏了，要说清是哪一步
+    except Exception as exc:
         raise ValueError(
             f"语音解码失败（{type(exc).__name__}）：录音格式可能不受支持或文件损坏，请重新录一段"
         ) from exc

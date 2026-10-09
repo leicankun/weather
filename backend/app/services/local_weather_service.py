@@ -102,12 +102,12 @@ async def resolve(
                 # 用区中心坐标而不是用户精确坐标：缓存命中率高，也更贴合"这个区的天气"
                 coords = district_dict.district_coords(district_name)
                 if coords:
-                    return ResolvedLocation(city, district_name, coords[0], coords[1], "geo", "district")
+                    return ResolvedLocation(
+                        city, district_name, coords[0], coords[1], "geo", "district"
+                    )
             return ResolvedLocation(city, None, lat, lon, "geo", "city")
         # 逆地理编码不可用（无 Key / 上游挂了）：仍然用坐标取数，只是名字说不出来
-        return ResolvedLocation(
-            settings.AMAP_DEFAULT_CITY, None, lat, lon, "geo", "city"
-        )
+        return ResolvedLocation(settings.AMAP_DEFAULT_CITY, None, lat, lon, "geo", "city")
 
     # 2) 手动选择的区名
     if district:

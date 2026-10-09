@@ -1,0 +1,16 @@
+{
+  "name": "weather-agent-workspace",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix frontend-user run dev",
+    "format": "prettier --write frontend-user/src frontend-admin/src frontend-user/*.js frontend-admin/*.js",
+    "dev:admin": "npm --prefix frontend-admin run dev",
+    "check:js": "node scripts/check-javascript.mjs",
+    "build": "npm run check:js && npm --prefix frontend-user run build && npm --prefix frontend-admin run build",
+    "test": "npm --prefix frontend-user test",
+    "test:e2e": "npm --prefix frontend-user run test:e2e"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.9"
+  }
+}

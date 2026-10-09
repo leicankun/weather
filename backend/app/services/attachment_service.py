@@ -199,7 +199,9 @@ def _vision_available() -> bool:
     return bool(api_key)
 
 
-async def create(filename: str, content_type: str | None, raw: bytes) -> tuple[Attachment, dict[str, Any]]:
+async def create(
+    filename: str, content_type: str | None, raw: bytes
+) -> tuple[Attachment, dict[str, Any]]:
     """解析一个上传的附件并暂存，返回 (附件对象, 给前端的元信息)。"""
     if not raw:
         raise ValueError("文件是空的")

@@ -140,9 +140,9 @@ def build_ics(items: list[dict[str, Any]], now: datetime | None = None) -> str:
                 has_start = True
         if not has_start:
             lines.append(f"DTSTART;VALUE=DATE:{item['date'].replace('-', '')}")
-            next_day = (
-                datetime.strptime(item["date"], "%Y-%m-%d") + timedelta(days=1)
-            ).strftime("%Y%m%d")
+            next_day = (datetime.strptime(item["date"], "%Y-%m-%d") + timedelta(days=1)).strftime(
+                "%Y%m%d"
+            )
             lines.append(f"DTEND;VALUE=DATE:{next_day}")
 
         if item.get("location"):

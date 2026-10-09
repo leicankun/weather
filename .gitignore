@@ -46,3 +46,7 @@ dist/
 shot-*.png
 fe-check.txt
 risk-*-mobile.png
+
+# Commit configuration templates, never actual credentials
+!.env.example
+!.env.*.example

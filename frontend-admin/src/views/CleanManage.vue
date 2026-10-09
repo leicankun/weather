@@ -1,34 +1,23 @@
-<script setup lang="ts">
+<script setup>
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-import {
-  listCleanTasks,
-  getCleanTask,
-  uploadCsv,
-  downloadClean,
-  type CleanTaskDetail,
-  type CleanTaskItem,
-} from '../api/clean'
-
+import { listCleanTasks, getCleanTask, uploadCsv, downloadClean } from '../api/clean'
 const loading = ref(false)
-const rows = ref<CleanTaskItem[]>([])
+const rows = ref([])
 const uploading = ref(false)
-const uploadInput = ref<HTMLInputElement | null>(null)
-
+const uploadInput = ref(null)
 // 日志弹窗
 const logVisible = ref(false)
 const logLoading = ref(false)
 const currentLog = ref('')
 const currentFileName = ref('')
-
-const STATUS_TAG: Record<string, { label: string; type: string }> = {
+const STATUS_TAG = {
   pending: { label: '排队中', type: 'info' },
   running: { label: '清洗中', type: 'warning' },
   success: { label: '成功', type: 'success' },
   failed: { label: '失败', type: 'danger' },
 }
-
 async function load() {
   loading.value = true
   try {
@@ -40,9 +29,8 @@ async function load() {
     loading.value = false
   }
 }
-
-async function onPickFile(e: Event) {
-  const input = e.target as HTMLInputElement
+async function onPickFile(e) {
+  const input = e.target
   const file = input.files?.[0]
   if (!file) return
   uploading.value = true
@@ -57,14 +45,13 @@ async function onPickFile(e: Event) {
     input.value = ''
   }
 }
-
-async function viewLog(task: CleanTaskItem) {
+async function viewLog(task) {
   logVisible.value = true
   logLoading.value = true
   currentFileName.value = task.filename
   currentLog.value = '加载中...'
   try {
-    const detail: CleanTaskDetail = await getCleanTask(task.task_id)
+    const detail = await getCleanTask(task.task_id)
     currentLog.value = detail.log || '（无日志）'
   } catch {
     currentLog.value = '获取日志失败'
@@ -72,15 +59,13 @@ async function viewLog(task: CleanTaskItem) {
     logLoading.value = false
   }
 }
-
-async function doDownload(task: CleanTaskItem) {
+async function doDownload(task) {
   try {
     await downloadClean(task.task_id, `cleaned_${task.filename}`)
   } catch {
     ElMessage.error('下载失败')
   }
 }
-
 onMounted(() => {
   load()
   setInterval(() => {
@@ -95,10 +80,21 @@ onMounted(() => {
     <template #header>
       <div class="hd">
         <b>原始数据清洗管理</b>
-        <el-button :loading="uploading" :icon="UploadFilled" type="primary" @click="uploadInput?.click()">
+        <el-button
+          :loading="uploading"
+          :icon="UploadFilled"
+          type="primary"
+          @click="uploadInput?.click()"
+        >
           上传 CSV 触发清洗
         </el-button>
-        <input ref="uploadInput" type="file" accept=".csv" style="display: none" @change="onPickFile" />
+        <input
+          ref="uploadInput"
+          type="file"
+          accept=".csv"
+          style="display: none"
+          @change="onPickFile"
+        />
       </div>
     </template>
 
@@ -120,7 +116,7 @@ onMounted(() => {
       <el-table-column prop="filename" label="文件名" min-width="200" show-overflow-tooltip />
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
-          <el-tag :type="(STATUS_TAG[row.status]?.type as any) || 'info'" size="small">
+          <el-tag :type="STATUS_TAG[row.status]?.type || 'info'" size="small">
             {{ STATUS_TAG[row.status]?.label || row.status }}
           </el-tag>
         </template>
@@ -139,12 +135,16 @@ onMounted(() => {
       <el-table-column label="单位标准化" prop="unit_standardized" width="100" align="center" />
       <el-table-column prop="triggered_by" label="触发人" width="100" />
       <el-table-column label="时间" width="160">
-        <template #default="{ row }">{{ String(row.created_at).replace('T', ' ').slice(0, 16) }}</template>
+        <template #default="{ row }">
+          {{ String(row.created_at).replace('T', ' ').slice(0, 16) }}
+        </template>
       </el-table-column>
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="viewLog(row)">日志</el-button>
-          <el-button v-if="row.status === 'success'" link type="success" @click="doDownload(row)">下载</el-button>
+          <el-button v-if="row.status === 'success'" link type="success" @click="doDownload(row)">
+            下载
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -152,12 +152,9 @@ onMounted(() => {
 
     <!-- 日志弹窗 -->
     <el-dialog v-model="logVisible" :title="`清洗日志 - ${currentFileName}`" width="720px">
-      <pre
-        v-loading="logLoading"
-        element-loading-text="正在获取清洗日志…"
-        class="log-box"
-        >{{ currentLog }}</pre
-      >
+      <pre v-loading="logLoading" element-loading-text="正在获取清洗日志…" class="log-box">{{
+        currentLog
+      }}</pre>
     </el-dialog>
   </el-card>
 </template>

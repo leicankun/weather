@@ -157,26 +157,6 @@ class WeatherClient:
             cur = resp.json().get("current", {})
         return AirQuality(pm25=cur.get("pm2_5"), pm10=cur.get("pm10"), us_aqi=cur.get("us_aqi"))
 
-    _AQI_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
-
-    async def fetch_aqi(
-        self, latitude: float | None = None, longitude: float | None = None
-    ) -> AirQuality:
-        """当前空气质量（PM2.5 / PM10 / US AQI）。免费源，无 Key。"""
-        lat = latitude if latitude is not None else settings.DEFAULT_LATITUDE
-        lon = longitude if longitude is not None else settings.DEFAULT_LONGITUDE
-        params = {
-            "latitude": lat,
-            "longitude": lon,
-            "current": "pm10,pm2_5,us_aqi",
-            "timezone": "Asia/Shanghai",
-        }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(self._AQI_URL, params=params)
-            resp.raise_for_status()
-            cur = resp.json().get("current", {})
-        return AirQuality(pm25=cur.get("pm2_5"), pm10=cur.get("pm10"), us_aqi=cur.get("us_aqi"))
-
     def __init__(
         self,
         base_url: str | None = None,
@@ -260,8 +240,7 @@ class WeatherClient:
                 "precipitation_sum,wind_speed_10m_max,sunrise,sunset"
             ),
             "hourly": (
-                "temperature_2m,precipitation_probability,precipitation,"
-                "weather_code,wind_speed_10m"
+                "temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m"
             ),
             "forecast_days": 7,
             "past_days": max(0, min(past_days, 92)),

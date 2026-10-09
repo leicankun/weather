@@ -7,6 +7,7 @@ NullPool 独立引擎，避免 asyncpg 连接跨事件循环失效。
 
 import asyncio
 import logging
+from contextlib import suppress
 
 from app.celery_app import celery_app
 from app.core.cache import cache_delete_prefix
@@ -71,9 +72,7 @@ def collect_weather_news(
     stat = _run(_job())
     # 采集改了 news 表，清掉列表读缓存，否则页面在 5 分钟 TTL 内仍显示旧数据
     # （定时任务不走 /news/collect 路由，不会自动清缓存，这里补上）
-    try:
+    with suppress(Exception):
         _run(cache_delete_prefix("news:list:"))
-    except Exception:  # noqa: BLE001
-        pass
     logger.info("气象资讯采集完成: %s", stat)
     return {"ok": True, **stat}

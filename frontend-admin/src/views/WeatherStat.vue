@@ -1,41 +1,30 @@
-<script setup lang="ts">
+<script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts/core'
-import type { ECharts } from 'echarts/core'
 import { BarChart, LineChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import {
-  analysisCompare,
-  analysisDaily,
-  refreshAggregate,
-  type CompareResult,
-  type DailyPoint,
-} from '../api/weather'
-
+import { analysisCompare, analysisDaily, refreshAggregate } from '../api/weather'
 // 按需注册：只打包用到的图表与组件，避免把整个 ECharts 打进 chunk
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
-
-const chartEl = ref<HTMLDivElement | null>(null)
+const chartEl = ref(null)
 const days = ref(90)
 const loading = ref(false)
 const failed = ref(false)
 const refreshing = ref(false)
-const compare = ref<{ yoy?: CompareResult; mom?: CompareResult }>({})
-let chart: ECharts | null = null
-
+const compare = ref({})
+let chart = null
 /** 图例：温度区间带（最高/最低之间）+ 均温线 + 降水累计柱 */
 async function render() {
   const res = await analysisDaily(days.value)
-  const items: DailyPoint[] = res.items
+  const items = res.items
   const dates = items.map((i) => i.date.slice(5))
   const lows = items.map((i) => i.temp_min ?? 0)
   // 区间带 = 最高 - 最低（下界用 stack 技巧画在低温之上）
   const band = items.map((i) => (i.temp_max ?? 0) - (i.temp_min ?? 0))
   const highs = items.map((i) => i.temp_max)
   const precip = items.map((i) => i.precip_sum ?? 0)
-
   if (!chart && chartEl.value) {
     chart = echarts.init(chartEl.value)
   }
@@ -89,7 +78,6 @@ async function render() {
     ],
   })
 }
-
 /** 同比 / 环比：两路并行，任一侧无数据由后端如实说明 */
 async function loadCompare() {
   try {
@@ -99,7 +87,6 @@ async function loadCompare() {
     /* 拦截器提示 */
   }
 }
-
 async function reload() {
   loading.value = true
   failed.value = false
@@ -113,7 +100,6 @@ async function reload() {
     loading.value = false
   }
 }
-
 async function onRefresh() {
   refreshing.value = true
   try {
@@ -130,22 +116,18 @@ async function onRefresh() {
     refreshing.value = false
   }
 }
-
-function fmt(value: number | null | undefined, unit: string, digits = 1): string {
+function fmt(value, unit, digits = 1) {
   if (value === null || value === undefined) return '—'
   const sign = value > 0 ? '+' : ''
   return `${sign}${value.toFixed(digits)}${unit}`
 }
-
 function onResize() {
   chart?.resize()
 }
-
 onMounted(async () => {
   await reload()
   window.addEventListener('resize', onResize)
 })
-
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   chart?.dispose()
@@ -182,40 +164,37 @@ onBeforeUnmount(() => {
       title="统计图表没能加载出来"
       description="这不代表这段时间没有数据；可能是聚合任务还没跑或接口暂时不可用，可点右上角「刷新聚合」重试。"
     />
-    <div
-      ref="chartEl"
-      v-loading="loading"
-      element-loading-text="正在加载统计图表…"
-      class="chart"
-    />
+    <div ref="chartEl" v-loading="loading" element-loading-text="正在加载统计图表…" class="chart" />
 
     <el-row :gutter="16" class="cmp">
-      <el-col :span="12" v-for="key in (['yoy', 'mom'] as const)" :key="key">
+      <el-col :span="12" v-for="key in ['yoy', 'mom']" :key="key">
         <div class="card" v-if="compare[key]">
           <div class="card-hd">
-            <b>{{ compare[key]!.kind_label }}</b>
-            <span class="period">{{ compare[key]!.current_period }} vs {{ compare[key]!.previous_period }}</span>
+            <b>{{ compare[key].kind_label }}</b>
+            <span class="period">
+              {{ compare[key].current_period }} vs {{ compare[key].previous_period }}
+            </span>
           </div>
 
-          <template v-if="compare[key]!.available">
+          <template v-if="compare[key].available">
             <div class="metrics">
               <div class="metric">
                 <span class="label">气温</span>
-                <span class="value">{{ fmt(compare[key]!.diff.temp_avg, '°C') }}</span>
+                <span class="value">{{ fmt(compare[key].diff.temp_avg, '°C') }}</span>
               </div>
               <div class="metric">
                 <span class="label">降水</span>
-                <span class="value">{{ fmt(compare[key]!.diff.precip_total, 'mm') }}</span>
+                <span class="value">{{ fmt(compare[key].diff.precip_total, 'mm') }}</span>
               </div>
               <div class="metric">
                 <span class="label">湿度</span>
-                <span class="value">{{ fmt(compare[key]!.diff.humidity_avg, '%') }}</span>
+                <span class="value">{{ fmt(compare[key].diff.humidity_avg, '%') }}</span>
               </div>
             </div>
-            <div class="verdict">{{ compare[key]!.verdict }}</div>
-            <div class="note">{{ compare[key]!.sample_note }}</div>
+            <div class="verdict">{{ compare[key].verdict }}</div>
+            <div class="note">{{ compare[key].sample_note }}</div>
           </template>
-          <el-empty :description="compare[key]!.reason" :image-size="60" v-else />
+          <el-empty :description="compare[key].reason" :image-size="60" v-else />
         </div>
       </el-col>
     </el-row>

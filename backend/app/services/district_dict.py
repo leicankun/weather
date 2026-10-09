@@ -240,7 +240,9 @@ _AREA_STOPWORDS = frozenset(
 _PLACE_SUFFIXES = frozenset("山湖塔寺街路园馆城港站岛桥苑村江海湾口门场楼观宫庙岭南厦幢号")
 
 # 简称后面是这些字（或到句尾），才认为他在说"要去这个区"：去南沙玩 / 南沙一日游 / 南沙，吃海鲜
-_AREA_TAILS = frozenset("玩逛吃住游转行旅的来了去在，。！？、；：  " "附近周日月年一两三四五六七八九十")
+_AREA_TAILS = frozenset(
+    "玩逛吃住游转行旅的来了去在，。！？、；：  附近周日月年一两三四五六七八九十"
+)
 
 
 # 抠出来的区名里出现这些虚词/代词，说明拿到的是句子片段（「这个地区」）而不是行政区名
@@ -365,7 +367,9 @@ def match_area(text: str) -> tuple[str, str] | None:
         return weak[0][2], weak[0][1]
 
     # 3. 通用规则（字典未收录的区）
-    pattern = re.compile(r"(?:去|到|在|住|游|逛|玩|的|了|想)?([\u4e00-\u9fa5]{2,3})(新区|开发区|区|县|镇)")
+    pattern = re.compile(
+        r"(?:去|到|在|住|游|逛|玩|的|了|想)?([\u4e00-\u9fa5]{2,3})(新区|开发区|区|县|镇)"
+    )
     for matched in pattern.finditer(raw):
         core, suffix = matched.group(1), matched.group(2)
         full = f"{core}{suffix}"

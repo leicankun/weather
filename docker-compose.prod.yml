@@ -15,10 +15,14 @@ services:
   postgres:
     environment:
       POSTGRES_PASSWORD: "${PG_PASSWORD}"
-    ports: []                      # 覆盖开发版的 5432:5432，禁止公网暴露
+    ports: !reset []
 
   redis:
-    ports: []                      # 覆盖开发版的 6379:6379
+    ports: !reset []
+
+  migrate:
+    environment:
+      DB_URL: postgresql+asyncpg://admin:${PG_PASSWORD}@postgres:5432/weather_db
 
   backend:
     environment:

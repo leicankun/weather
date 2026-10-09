@@ -1,17 +1,14 @@
-<script setup lang="ts">
+<script setup>
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '../store/auth'
-
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
-
 const form = reactive({ username: 'admin', password: '' })
 const loading = ref(false)
-
 async function handleLogin() {
   if (!form.username || !form.password) {
     ElMessage.warning('请输入账号和密码')
@@ -21,7 +18,7 @@ async function handleLogin() {
   try {
     await auth.login(form.username, form.password)
     ElMessage.success('登录成功')
-    const redirect = (route.query.redirect as string) || '/dashboard'
+    const redirect = route.query.redirect || '/dashboard'
     router.push(redirect)
   } catch {
     // 拦截器已提示
@@ -39,9 +36,14 @@ async function handleLogin() {
         <h2>气象出行推荐 · 管理后台</h2>
         <p>广州气象大数据 & AI 出行推荐系统</p>
       </div>
-      <el-form :model="form" label-position="top" @keyup.enter="handleLogin">
+      <el-form :model="form" label-position="top" @submit.prevent="handleLogin">
         <el-form-item>
-          <el-input v-model="form.username" placeholder="管理员账号" :prefix-icon="User" size="large" />
+          <el-input
+            v-model="form.username"
+            placeholder="管理员账号"
+            :prefix-icon="User"
+            size="large"
+          />
         </el-form-item>
         <el-form-item>
           <el-input
@@ -53,7 +55,13 @@ async function handleLogin() {
             show-password
           />
         </el-form-item>
-        <el-button type="primary" size="large" style="width: 100%" :loading="loading" @click="handleLogin">
+        <el-button
+          type="primary"
+          size="large"
+          style="width: 100%"
+          :loading="loading"
+          native-type="submit"
+        >
           登 录
         </el-button>
       </el-form>

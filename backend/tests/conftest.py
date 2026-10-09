@@ -34,6 +34,7 @@ os.environ["DB_URL"] = TEST_DB_URL
 # pytest-asyncio 每个用例新建事件循环，连接池缓存会跨 loop 失效
 os.environ["DB_USE_NULLPOOL"] = "1"
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
@@ -114,10 +115,31 @@ async def _prepare_schema() -> None:
         )
 
 
+def pytest_addoption(parser) -> None:
+    parser.addoption(
+        "--no-db",
+        action="store_true",
+        default=False,
+        help="Run database-independent tests; explicitly skip PostgreSQL integration tests.",
+    )
+
+
+def pytest_collection_modifyitems(config, items) -> None:
+    if not config.getoption("--no-db"):
+        return
+    requires_db = {"db", "client", "user_token", "auth_headers", "admin_headers"}
+    marker = pytest.mark.skip(reason="--no-db: requires PostgreSQL integration fixtures")
+    for item in items:
+        if requires_db.intersection(item.fixturenames):
+            item.add_marker(marker)
+
+
 def pytest_sessionstart(session) -> None:
     """整个测试会话开始时：建库 + 建表（只做一次）。"""
     import asyncio
 
+    if session.config.getoption("--no-db"):
+        return
     asyncio.run(_ensure_database())
     asyncio.run(_prepare_schema())
 
@@ -133,7 +155,7 @@ async def db():
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def _clean_tables():
+async def _clean_tables(request):
     """每个用例结束后清空所有表，保证用例之间互不干扰。
 
     TRUNCATE ... RESTART IDENTITY CASCADE：
@@ -141,6 +163,8 @@ async def _clean_tables():
     - CASCADE 一并清空有外键引用的表
     """
     yield
+    if request.config.getoption("--no-db"):
+        return
     async with _engine.begin() as conn:
         names = ", ".join(f'"{t.name}"' for t in reversed(Base.metadata.sorted_tables))
         if names:

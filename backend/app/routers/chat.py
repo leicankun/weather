@@ -115,9 +115,7 @@ async def upload_attachment(
     """
     raw = await file.read()
     try:
-        _item, meta = await attachment_service.create(
-            file.filename or "", file.content_type, raw
-        )
+        _item, meta = await attachment_service.create(file.filename or "", file.content_type, raw)
     except ValueError as exc:
         # 这些消息都是写给用户看的（格式不支持 / 太大 / 语音未开启…）
         raise HTTPException(status_code=400, detail=str(exc)) from exc

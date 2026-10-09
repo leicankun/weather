@@ -1,30 +1,26 @@
-<script setup lang="ts">
+<script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listNews, createNews, updateNews, deleteNews, type NewsItem } from '../api/news'
-
+import { listNews, createNews, updateNews, deleteNews } from '../api/news'
 const loading = ref(false)
-const rows = ref<NewsItem[]>([])
+const rows = ref([])
 const total = ref(0)
-
 const query = reactive({
   page: 1,
   page_size: 20,
-  category: '' as 'news' | 'notice' | '',
+  category: '',
   keyword: '',
 })
-
 const dialogVisible = ref(false)
 const editing = ref(false)
 const form = reactive({
   id: 0,
   title: '',
   content: '',
-  category: 'news' as 'news' | 'notice',
+  category: 'news',
   is_top: false,
   is_published: false,
 })
-
 function emptyForm() {
   form.id = 0
   form.title = ''
@@ -33,7 +29,6 @@ function emptyForm() {
   form.is_top = false
   form.is_published = false
 }
-
 async function load() {
   loading.value = true
   try {
@@ -52,19 +47,16 @@ async function load() {
     loading.value = false
   }
 }
-
 function onSearch() {
   query.page = 1
   load()
 }
-
 function openCreate() {
   editing.value = false
   emptyForm()
   dialogVisible.value = true
 }
-
-function openEdit(row: NewsItem) {
+function openEdit(row) {
   editing.value = true
   form.id = row.id
   form.title = row.title
@@ -74,7 +66,6 @@ function openEdit(row: NewsItem) {
   form.is_published = row.is_published
   dialogVisible.value = true
 }
-
 async function submit() {
   if (!form.title.trim() || !form.content.trim()) {
     ElMessage.warning('标题和内容不能为空')
@@ -97,26 +88,22 @@ async function submit() {
   dialogVisible.value = false
   load()
 }
-
-async function onDelete(row: NewsItem) {
+async function onDelete(row) {
   await ElMessageBox.confirm(`确认删除「${row.title}」？`, '删除确认', { type: 'warning' })
   await deleteNews(row.id)
   ElMessage.success('删除成功')
   load()
 }
-
-async function togglePublish(row: NewsItem) {
+async function togglePublish(row) {
   await updateNews(row.id, { is_published: !row.is_published })
   ElMessage.success(row.is_published ? '已取消发布' : '已发布')
   load()
 }
-
-async function toggleTop(row: NewsItem) {
+async function toggleTop(row) {
   await updateNews(row.id, { is_top: !row.is_top })
   ElMessage.success(row.is_top ? '已取消置顶' : '已置顶')
   load()
 }
-
 onMounted(load)
 </script>
 
@@ -141,7 +128,13 @@ onMounted(load)
         </el-select>
       </el-form-item>
       <el-form-item label="关键字">
-        <el-input v-model="query.keyword" placeholder="搜索标题" clearable style="width: 200px" @keyup.enter="onSearch" />
+        <el-input
+          v-model="query.keyword"
+          placeholder="搜索标题"
+          clearable
+          style="width: 200px"
+          @keyup.enter="onSearch"
+        />
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="onSearch">查询</el-button>
@@ -177,7 +170,9 @@ onMounted(load)
       <el-table-column prop="view_count" label="阅读" width="80" align="center" />
       <el-table-column label="作者" prop="author" width="110" />
       <el-table-column label="发布时间" width="160">
-        <template #default="{ row }">{{ String(row.created_at).replace('T', ' ').slice(0, 16) }}</template>
+        <template #default="{ row }">
+          {{ String(row.created_at).replace('T', ' ').slice(0, 16) }}
+        </template>
       </el-table-column>
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">

@@ -151,7 +151,11 @@ def assess_day(
 
     # ⑥ 降温：与前一日最高温比较（拿不到前一天就不判，不猜）
     prev_max = getattr(prev_day, "temp_max", None) if prev_day is not None else None
-    if tmax is not None and prev_max is not None and (prev_max - tmax) >= settings.TEMP_DROP_ALERT_C:
+    if (
+        tmax is not None
+        and prev_max is not None
+        and (prev_max - tmax) >= settings.TEMP_DROP_ALERT_C
+    ):
         return RiskHit(
             date=day.date,
             kind="drop",

@@ -1,25 +1,21 @@
-<script setup lang="ts">
+<script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { listFeedback, updateFeedback, type FeedbackItem } from '../api/feedback'
-
-const STATUS_MAP: Record<string, { label: string; type: string }> = {
+import { listFeedback, updateFeedback } from '../api/feedback'
+const STATUS_MAP = {
   pending: { label: '待处理', type: 'warning' },
   processing: { label: '处理中', type: 'primary' },
   resolved: { label: '已解决', type: 'success' },
   closed: { label: '已关闭', type: 'info' },
 }
-
 const loading = ref(false)
-const rows = ref<FeedbackItem[]>([])
+const rows = ref([])
 const total = ref(0)
 const query = reactive({ page: 1, page_size: 20, status: '' })
-
 // 回复弹窗
 const dialogVisible = ref(false)
-const current = ref<FeedbackItem | null>(null)
+const current = ref(null)
 const reply = ref('')
-
 async function load() {
   loading.value = true
   try {
@@ -33,25 +29,21 @@ async function load() {
     loading.value = false
   }
 }
-
-function onStatusFilter(v: string) {
+function onStatusFilter(v) {
   query.status = v
   query.page = 1
   load()
 }
-
-async function changeStatus(row: FeedbackItem, s: string) {
+async function changeStatus(row, s) {
   await updateFeedback(row.id, { status: s })
-  row.status = s as FeedbackItem['status']
+  row.status = s
   ElMessage.success(`状态已更新为「${STATUS_MAP[s].label}」`)
 }
-
-function openReply(row: FeedbackItem) {
+function openReply(row) {
   current.value = row
   reply.value = row.reply || ''
   dialogVisible.value = true
 }
-
 async function submitReply() {
   if (!current.value) return
   await updateFeedback(current.value.id, {
@@ -62,7 +54,6 @@ async function submitReply() {
   dialogVisible.value = false
   load()
 }
-
 onMounted(load)
 </script>
 
@@ -91,26 +82,37 @@ onMounted(load)
       <el-table-column type="index" width="50" />
       <el-table-column prop="content" label="反馈内容" min-width="240" show-overflow-tooltip />
       <el-table-column label="提交人" width="100">
-        <template #default="{ row }">{{ row.username || (row.user_id ? `用户#${row.user_id}` : '匿名') }}</template>
+        <template #default="{ row }">
+          {{ row.username || (row.user_id ? `用户#${row.user_id}` : '匿名') }}
+        </template>
       </el-table-column>
       <el-table-column prop="contact" label="联系方式" width="140">
         <template #default="{ row }">{{ row.contact || '--' }}</template>
       </el-table-column>
       <el-table-column label="状态" width="130">
         <template #default="{ row }">
-          <el-select :model-value="row.status" size="small" style="width: 110px" @change="(v: string) => changeStatus(row, v)">
+          <el-select
+            :model-value="row.status"
+            size="small"
+            style="width: 110px"
+            @change="(v: string) => changeStatus(row, v)"
+          >
             <el-option v-for="(m, k) in STATUS_MAP" :key="k" :label="m.label" :value="k" />
           </el-select>
         </template>
       </el-table-column>
       <el-table-column label="回复" min-width="140">
         <template #default="{ row }">
-          <el-tag v-if="row.reply" type="success" size="small" effect="plain">{{ row.reply }}</el-tag>
+          <el-tag v-if="row.reply" type="success" size="small" effect="plain">
+            {{ row.reply }}
+          </el-tag>
           <span v-else style="color: #c0c4cc">未回复</span>
         </template>
       </el-table-column>
       <el-table-column label="提交时间" width="160">
-        <template #default="{ row }">{{ String(row.created_at).replace('T', ' ').slice(0, 16) }}</template>
+        <template #default="{ row }">
+          {{ String(row.created_at).replace('T', ' ').slice(0, 16) }}
+        </template>
       </el-table-column>
       <el-table-column label="操作" width="90" fixed="right">
         <template #default="{ row }">

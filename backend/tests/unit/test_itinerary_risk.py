@@ -103,7 +103,13 @@ def test_高温只对户外活动成立():
 
 def test_降温需要前一天数据_缺数据时不猜():
     today_cool = day(TODAY, desc="多云", tmax=24.0)
-    assert assess_day(today_cool, day("2026-09-22", tmax=33.0), ).kind == "drop"
+    assert (
+        assess_day(
+            today_cool,
+            day("2026-09-22", tmax=33.0),
+        ).kind
+        == "drop"
+    )
     # 拿不到前一天 → 不产生结论（而不是默认安全或默认危险）
     assert assess_day(today_cool, None) is None
 

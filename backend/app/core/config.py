@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     """全局配置，从 .env 读取（DeepSeek Key 仅存后端 .env）。"""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )

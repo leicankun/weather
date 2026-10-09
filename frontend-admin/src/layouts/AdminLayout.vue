@@ -1,22 +1,12 @@
-<script setup lang="ts">
+<script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import * as Icons from '@element-plus/icons-vue'
-import type { Component } from 'vue'
-
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-
-interface MenuItem {
-  path: string
-  title: string
-  icon?: string
-  children?: MenuItem[]
-}
-
-const menus: MenuItem[] = [
+const menus = [
   { path: '/dashboard', title: '数据总览', icon: 'DataBoard' },
   { path: '/weather', title: '气象大数据管理', icon: 'PartlyCloudy' },
   { path: '/news', title: '资讯公告管理', icon: 'Notebook' },
@@ -25,15 +15,12 @@ const menus: MenuItem[] = [
   { path: '/clean', title: '原始数据清洗', icon: 'DataAnalysis' },
   { path: '/sync', title: '天气数据同步', icon: 'Refresh' },
 ]
-
-function icon(name?: string): Component | undefined {
+function icon(name) {
   if (!name) return undefined
-  const map = Icons as Record<string, Component>
+  const map = Icons
   return map[name]
 }
-
 const activeMenu = computed(() => route.path)
-
 function onLogout() {
   auth.logout()
   router.push('/login')

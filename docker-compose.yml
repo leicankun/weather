@@ -1,168 +1,83 @@
-# 一键拉起整套业务系统：PostgreSQL(TimescaleDB+PostGIS+pgvector) / Redis /
-# FastAPI 后端 / Celery worker / 用户端 Nginx / 管理端 Nginx
-#
-# 两种使用模式（build 与 image 字段并存，互不冲突）：
-#   ① 本地开发（源码构建）：
-#      docker compose up -d --build
-#      → 按各 Dockerfile 构建并打上 image: 指定的标签
-#
-#   ② 部署 / 回滚（拉取 CI 发布到 GHCR 的镜像，不构建）：
-#      IMAGE_TAG=latest ./deploy.sh              # 部署主干最新版
-#      IMAGE_TAG=sha-4c3abe9 ./deploy.sh         # 部署/回滚到指定提交的版本
-#
-#   IMAGE_TAG 决定应用镜像（backend/celery/两个前端）用哪个版本——
-#   这正是"可回滚"的关键：回滚 = 用旧 tag 再跑一次 deploy.sh。
-#   postgres 镜像跟 PG 版本走（pg17），不随应用版本变化，故用固定 tag。
-#
-# 访问地址：
-#   用户端     http://localhost:8080
-#   管理端     http://localhost:8081
-#   后端 API   http://localhost:8000/docs
+# Local source builds; PostgreSQL includes TimescaleDB, PostGIS and pgvector.
+x-backend: &backend
+  build: ./backend
+  image: weather-backend:local
+  working_dir: /app
+  env_file:
+    - ${ENV_FILE:-./backend/.env}
+  environment:
+    DB_URL: postgresql+asyncpg://admin:123456@postgres:5432/weather_db
+    REDIS_URL: redis://redis:6379/0
 services:
   postgres:
     build:
       context: .
       dockerfile: Dockerfile.pg
-    image: ghcr.io/ticnix/weather-pg:pg17
-    container_name: weather-pg
+    image: weather-postgres:local
     environment:
       POSTGRES_USER: admin
-      POSTGRES_PASSWORD: "123456"
+      POSTGRES_PASSWORD: '123456'
       POSTGRES_DB: weather_db
-    ports:
-      - "127.0.0.1:5432:5432"
+    ports: ['127.0.0.1:5432:5432']
     volumes:
       - pg_data:/var/lib/postgresql/data
-      # 初始化脚本：自动启用 timescaledb / vector / postgis 三大扩展
       - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d weather_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
-  redis:
-    image: redis:7.2-alpine
-    container_name: weather-redis
-    ports:
-      - "127.0.0.1:6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [CMD-SHELL, 'pg_isready -U admin -d weather_db']
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
     restart: unless-stopped
-
-  # FastAPI 后端
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: ghcr.io/ticnix/weather-backend:${IMAGE_TAG:-latest}
-    container_name: weather-backend
-    working_dir: /app
-    env_file:
-      # 部署时可指定环境配置：ENV_FILE=./backend/.env.prod ./deploy.sh
-      # 本地开发默认使用 backend/.env
-      - ${ENV_FILE:-./backend/.env}
-    environment:
-      # 容器内需用 compose 服务名互访，覆盖 .env 中本地开发的 127.0.0.1
-      DB_URL: postgresql+asyncpg://admin:123456@postgres:5432/weather_db
-      REDIS_URL: redis://redis:6379/0
-    # --no-access-log：请求日志由应用中间件输出（含 request_id/耗时/路由模板），
-    # uvicorn 自带的 access log 与其重复且无 request_id，只会在日志里制造噪音
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log
-    ports:
-      - "127.0.0.1:8000:8000"
+  redis:
+    image: redis:7.2-alpine
+    ports: ['127.0.0.1:6379:6379']
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  migrate:
+    <<: *backend
+    command: alembic upgrade head
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      postgres: {condition: service_healthy}
+    restart: 'no'
+  backend:
+    <<: *backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports: ['127.0.0.1:8000:8000']
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
     restart: unless-stopped
-
-  # Celery worker：清洗 / 气象同步 / 知识库索引等异步任务
   celery:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: ghcr.io/ticnix/weather-backend:${IMAGE_TAG:-latest}
-    container_name: weather-celery
-    working_dir: /app
-    env_file:
-      # 部署时可指定环境配置：ENV_FILE=./backend/.env.prod ./deploy.sh
-      # 本地开发默认使用 backend/.env
-      - ${ENV_FILE:-./backend/.env}
-    environment:
-      DB_URL: postgresql+asyncpg://admin:123456@postgres:5432/weather_db
-      REDIS_URL: redis://redis:6379/0
+    <<: *backend
     command: celery -A app.celery_app worker -l info
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
     restart: unless-stopped
-
-  # Celery beat：定时调度器（每天 7:30 / 17:30 抓气象资讯、整点早报、每 10 分钟预警等）。
-  # 只负责把任务塞进 Redis，真正执行仍是 celery worker，故 beat 无状态、可随时重启。
-  # 注意：beat_schedule 定义在 backend/app/celery_app.py，改调度频率去那里调。
   celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: ghcr.io/ticnix/weather-backend:${IMAGE_TAG:-latest}
-    container_name: weather-celery-beat
-    working_dir: /app
-    env_file:
-      - ${ENV_FILE:-./backend/.env}
-    environment:
-      DB_URL: postgresql+asyncpg://admin:123456@postgres:5432/weather_db
-      REDIS_URL: redis://redis:6379/0
+    <<: *backend
     command: celery -A app.celery_app beat -l info
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
     restart: unless-stopped
-
-  # 用户端（React19 + Vite，Nginx 托管静态资源并代理 /api）
   frontend-user:
-    build:
-      context: ./frontend-user
-      dockerfile: Dockerfile
-    image: ghcr.io/ticnix/weather-frontend-user:${IMAGE_TAG:-latest}
-    container_name: weather-frontend-user
-    ports:
-      - "8080:80"
-    depends_on:
-      - backend
+    build: ./frontend-user
+    ports: ['127.0.0.1:8080:80']
+    depends_on: [backend]
     restart: unless-stopped
-
-  # 管理端（Vue3 + Vite）
   frontend-admin:
-    build:
-      context: ./frontend-admin
-      dockerfile: Dockerfile
-    image: ghcr.io/ticnix/weather-frontend-admin:${IMAGE_TAG:-latest}
-    container_name: weather-frontend-admin
-    ports:
-      - "8081:80"
-    depends_on:
-      - backend
+    build: ./frontend-admin
+    ports: ['127.0.0.1:8081:80']
+    depends_on: [backend]
     restart: unless-stopped
-
-  # 本地邮件捕获（验收用）：SMTP 收下的信存内存，网页 localhost:8025 可看，
-  # 不真正投递到公网邮箱。接真实邮箱时改 backend/.env 的 SMTP_* 即可。
   mailhog:
     image: mailhog/mailhog
-    container_name: weather-mailhog
-    ports:
-      - "127.0.0.1:1025:1025" # SMTP
-      - "127.0.0.1:8025:8025" # Web UI
-    restart: unless-stopped
-
+    profiles: [mail]
+    ports: ['127.0.0.1:1025:1025', '127.0.0.1:8025:8025']
 volumes:
   pg_data:

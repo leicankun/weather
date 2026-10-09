@@ -132,10 +132,8 @@ async def local_weather(
     退级时必须让前端能如实说明，而不是让用户以为这就是他家门口的天气。
     """
     try:
-        data = await local_weather_service.get_local_weather(
-            district=district, lat=lat, lon=lon
-        )
-    except Exception as exc:  # noqa: BLE001 上游不可用不该抛 500 给前端
+        data = await local_weather_service.get_local_weather(district=district, lat=lat, lon=lon)
+    except Exception as exc:
         # 必须打日志并带上异常类型：httpx.ConnectError 这类异常的 str() 是空字符串，
         # 只把 str(exc) 丢给前端，用户和排查的人都只会看到"取不到："后面什么也没有
         logger.exception("区级天气取数失败 district=%s lat=%s lon=%s", district, lat, lon)

@@ -1,21 +1,18 @@
-<script setup lang="ts">
+<script setup>
 import { onMounted, ref } from 'vue'
-import { currentWeather, historyList, forecast, type HistoryRecord } from '../api/weather'
-
-const now = ref<HistoryRecord | null>(null)
+import { currentWeather, historyList, forecast } from '../api/weather'
+const now = ref(null)
 const recentCount = ref(0)
 const forecastCount = ref(0)
 // 三张卡片初始都是「--」，加载中和取不到数据看起来完全一样，
 // 所以两个状态都要显式提示
 const loading = ref(true)
 const failed = ref(false)
-
 const cards = [
   { title: '气象时序记录', value: '--', suffix: '条', icon: '🕒', color: '#3b82f6' },
   { title: '7 天预报', value: '--', suffix: '天', icon: '📅', color: '#10b981' },
   { title: '当前温度', value: '--', suffix: '°C', icon: '🌡️', color: '#f59e0b' },
 ]
-
 function fillCards() {
   if (now.value) {
     cards[2].value = String(now.value.temperature ?? '--')
@@ -23,7 +20,6 @@ function fillCards() {
   cards[0].value = String(recentCount.value)
   cards[1].value = String(forecastCount.value)
 }
-
 onMounted(async () => {
   loading.value = true
   failed.value = false
@@ -72,7 +68,8 @@ onMounted(async () => {
           </div>
           <div>
             <div class="stat-value">
-              {{ c.value }}<small>{{ c.suffix }}</small>
+              {{ c.value }}
+              <small>{{ c.suffix }}</small>
             </div>
             <div class="stat-title">{{ c.title }}</div>
           </div>
@@ -83,15 +80,42 @@ onMounted(async () => {
     <el-card shadow="never" class="now-card" v-if="now">
       <template #header><b>最新实测天气</b></template>
       <div class="now-grid">
-        <div class="now-item"><span>天气</span><b>{{ now.weather_desc || '--' }}</b></div>
-        <div class="now-item"><span>温度</span><b>{{ now.temperature }}°C</b></div>
-        <div class="now-item"><span>体感</span><b>{{ now.feels_like }}°C</b></div>
-        <div class="now-item"><span>湿度</span><b>{{ now.humidity }}%</b></div>
-        <div class="now-item"><span>风速</span><b>{{ now.wind_speed }} km/h</b></div>
-        <div class="now-item"><span>风向</span><b>{{ now.wind_direction || '--' }}</b></div>
-        <div class="now-item"><span>气压</span><b>{{ now.pressure }} hPa</b></div>
-        <div class="now-item"><span>能见度</span><b>{{ now.visibility }} km</b></div>
-        <div class="now-item"><span>更新时间</span><b>{{ String(now.time).replace('T', ' ').slice(0, 19) }}</b></div>
+        <div class="now-item">
+          <span>天气</span>
+          <b>{{ now.weather_desc || '--' }}</b>
+        </div>
+        <div class="now-item">
+          <span>温度</span>
+          <b>{{ now.temperature }}°C</b>
+        </div>
+        <div class="now-item">
+          <span>体感</span>
+          <b>{{ now.feels_like }}°C</b>
+        </div>
+        <div class="now-item">
+          <span>湿度</span>
+          <b>{{ now.humidity }}%</b>
+        </div>
+        <div class="now-item">
+          <span>风速</span>
+          <b>{{ now.wind_speed }} km/h</b>
+        </div>
+        <div class="now-item">
+          <span>风向</span>
+          <b>{{ now.wind_direction || '--' }}</b>
+        </div>
+        <div class="now-item">
+          <span>气压</span>
+          <b>{{ now.pressure }} hPa</b>
+        </div>
+        <div class="now-item">
+          <span>能见度</span>
+          <b>{{ now.visibility }} km</b>
+        </div>
+        <div class="now-item">
+          <span>更新时间</span>
+          <b>{{ String(now.time).replace('T', ' ').slice(0, 19) }}</b>
+        </div>
       </div>
     </el-card>
     <!-- 取不到时也要给出说明，别让整块悄悄消失 -->

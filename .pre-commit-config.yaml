@@ -42,15 +42,15 @@ repos:
       - id: check-added-large-files
         args: [--maxkb=1024]
 
-  # ── 前端：eslint + TypeScript 类型检查 ────────────────────────────────
+  # ── 前端：eslint + Vue JavaScript 构建 ────────────────────────────────
   # 用本地 Python 脚本而不是直接写 npm 命令，原因见脚本注释：
   # Windows 下 npm 实际是 npm.cmd，pre-commit 按字符串找可执行文件会找不到。
   - repo: local
     hooks:
       - id: frontend-check
-        name: 前端 · eslint + 类型检查
+        name: 前端 · eslint + 构建
         entry: python scripts/precommit_frontend.py
         language: system
         pass_filenames: false
         # 只有改到前端源码时才触发，避免改后端文档也要等前端检查
-        files: ^frontend-user/.*\.(ts|tsx|js|jsx)$
+        files: ^frontend-(user|admin)/.*\.(js|vue)$

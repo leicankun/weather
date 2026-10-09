@@ -61,9 +61,7 @@ def _resolve_provider(provider: str) -> tuple[str, str, str]:
     return api_key, base_url, model
 
 
-def get_llm(
-    provider: str | None = None, model: str | None = None, **kwargs: Any
-) -> ChatOpenAI:
+def get_llm(provider: str | None = None, model: str | None = None, **kwargs: Any) -> ChatOpenAI:
     """按提供商获取（并缓存）ChatOpenAI 实例。
 
     参数：

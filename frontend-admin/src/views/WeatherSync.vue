@@ -1,16 +1,14 @@
-<script setup lang="ts">
+<script setup>
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { currentWeather, syncNow, syncHistory, historyList, type HistoryRecord } from '../api/weather'
-
-const now = ref<HistoryRecord | null>(null)
-const recent = ref<HistoryRecord[]>([])
+import { currentWeather, syncNow, syncHistory, historyList } from '../api/weather'
+const now = ref(null)
+const recent = ref([])
 const syncing = ref(false)
 // 加载中 / 加载失败都要能看见：否则页面显示的空表和"确实没同步过"无法区分
 const loading = ref(true)
 const failed = ref(false)
 const backfillDays = ref(30)
-
 async function load() {
   loading.value = true
   failed.value = false
@@ -29,11 +27,10 @@ async function load() {
   }
   loading.value = false
 }
-
 async function onSync() {
   syncing.value = true
   try {
-    const res: any = await syncNow()
+    const res = await syncNow()
     ElMessage.success(`同步成功：${res.temperature ?? ''}°C ${res.weather_desc ?? ''}`)
     load()
   } catch {
@@ -42,7 +39,6 @@ async function onSync() {
     syncing.value = false
   }
 }
-
 async function onBackfill() {
   await ElMessageBox.confirm(
     `将调用 Open-Meteo 回补过去 ${backfillDays.value} 天的日统计作为实测入库，是否继续？`,
@@ -50,14 +46,13 @@ async function onBackfill() {
     { type: 'warning' },
   )
   try {
-    const res: any = await syncHistory(backfillDays.value)
+    const res = await syncHistory(backfillDays.value)
     ElMessage.success(res.message || '历史回补完成')
     load()
   } catch {
     /* 拦截器提示 */
   }
 }
-
 onMounted(load)
 </script>
 
@@ -77,7 +72,9 @@ onMounted(load)
     <el-card shadow="never">
       <template #header><b>手动天气同步</b></template>
       <el-space wrap>
-        <el-button type="primary" :loading="syncing" @click="onSync">立即同步（实时 + 7 天预报）</el-button>
+        <el-button type="primary" :loading="syncing" @click="onSync">
+          立即同步（实时 + 7 天预报）
+        </el-button>
         <el-space>
           <el-input-number v-model="backfillDays" :min="1" :max="92" style="width: 120px" />
           <span>天历史回补</span>
@@ -101,7 +98,11 @@ onMounted(load)
       </el-descriptions>
       <el-empty
         v-else
-        :description="failed ? '没能取到最新实测（不是没有数据），可点上方「立即同步」重试' : '暂无数据，请先同步'"
+        :description="
+          failed
+            ? '没能取到最新实测（不是没有数据），可点上方「立即同步」重试'
+            : '暂无数据，请先同步'
+        "
       />
     </el-card>
 
@@ -117,7 +118,9 @@ onMounted(load)
         max-height="420"
       >
         <el-table-column label="时间" width="180">
-          <template #default="{ row }">{{ String(row.time).replace('T', ' ').slice(0, 19) }}</template>
+          <template #default="{ row }">
+            {{ String(row.time).replace('T', ' ').slice(0, 19) }}
+          </template>
         </el-table-column>
         <el-table-column prop="weather_desc" label="天气" width="100" />
         <el-table-column prop="temperature" label="温度°C" width="90" />

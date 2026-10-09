@@ -11,11 +11,11 @@
     而不是丢一段 stack trace 给开发者。
 
 检查内容：
-    1. eslint  —— 代码规范（含 React Hooks 规则）
-    2. tsc -b  —— TypeScript 类型检查（等价于 npm run build 的前半段）
+    1. eslint  —— Vue / JavaScript 代码规范
+    2. check-javascript —— 两个前端不引入 TypeScript 源文件
 
 注意：这里刻意不跑 `npm run build`（会额外做打包，慢且没必要）。
-类型检查才是提交前真正要守住的东西，打包留给 CI。
+打包和浏览器回归由 CI 执行。
 """
 
 from __future__ import annotations
@@ -54,13 +54,13 @@ def main() -> int:
         return 0
 
     checks = [
-        (["npm", "run", "lint"], "eslint 代码检查"),
-        (["npx", "tsc", "-b"], "TypeScript 类型检查"),
+        (["npm", "run", "lint"], FRONTEND_DIR, "eslint 代码检查"),
+        (["node", "scripts/check-javascript.mjs"], ROOT, "JavaScript 源文件检查"),
     ]
 
     failed: list[str] = []
-    for cmd, label in checks:
-        if not _run(cmd, FRONTEND_DIR, label):
+    for cmd, cwd, label in checks:
+        if not _run(cmd, cwd, label):
             failed.append(label)
 
     if failed:

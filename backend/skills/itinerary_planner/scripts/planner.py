@@ -398,7 +398,7 @@ def _search_pairs(categories: list[str], core: str | None) -> list[tuple[str, st
     if core:
         # 关键词都是区名，只有类型不同，去重后逐个类型查一次
         return [(core, types) for types in dict.fromkeys(types_of)]
-    return list(zip(categories, types_of))
+    return list(zip(categories, types_of, strict=True))
 
 
 def _poi_in_area(poi: dict[str, Any], core: str) -> bool:
@@ -434,9 +434,7 @@ def _is_place_of_interest(poi: dict[str, Any]) -> bool:
     return not any(word in poi.get("name", "") for word in _POI_SKIP_NAME_KEYWORDS)
 
 
-async def _search_pois(
-    city: str, categories: list[str], core: str | None
-) -> list[dict[str, Any]]:
+async def _search_pois(city: str, categories: list[str], core: str | None) -> list[dict[str, Any]]:
     """按 (关键词, 类型) 组合检索并合并候选 POI。"""
     found: list[dict[str, Any]] = []
     for keyword, types in _search_pairs(categories, core):

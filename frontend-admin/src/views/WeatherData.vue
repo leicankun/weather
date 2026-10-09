@@ -1,22 +1,19 @@
-<script setup lang="ts">
+<script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { adminList, type HistoryRecord } from '../api/weather'
-
+import { adminList } from '../api/weather'
 const loading = ref(false)
-const rows = ref<HistoryRecord[]>([])
+const rows = ref([])
 const total = ref(0)
-const selection = ref<HistoryRecord[]>([])
-
+const selection = ref([])
 const query = reactive({
   page: 1,
   page_size: 20,
   date_from: '',
   date_to: '',
   weather: '',
-  forecast: '' as '' | 'true' | 'false',
+  forecast: '',
 })
-
 async function load() {
   loading.value = true
   try {
@@ -37,12 +34,10 @@ async function load() {
     loading.value = false
   }
 }
-
 function onSearch() {
   query.page = 1
   load()
 }
-
 function onReset() {
   query.date_from = ''
   query.date_to = ''
@@ -50,14 +45,12 @@ function onReset() {
   query.forecast = ''
   onSearch()
 }
-
-function handleSelectionChange(val: HistoryRecord[]) {
+function handleSelectionChange(val) {
   selection.value = val
 }
-
 // 导出 CSV（导出当前全部筛选结果）
 async function exportCsv() {
-  let target: HistoryRecord[]
+  let target
   if (selection.value.length) {
     target = selection.value
   } else {
@@ -68,7 +61,19 @@ async function exportCsv() {
     ElMessage.warning('没有可导出的数据')
     return
   }
-  const headers = ['时间', '天气', '温度°C', '体感°C', '湿度%', '气压hPa', '风速km/h', '风向', '降水mm', '能见度km', '类型']
+  const headers = [
+    '时间',
+    '天气',
+    '温度°C',
+    '体感°C',
+    '湿度%',
+    '气压hPa',
+    '风速km/h',
+    '风向',
+    '降水mm',
+    '能见度km',
+    '类型',
+  ]
   const lines = target.map((r) =>
     [
       String(r.time).replace('T', ' ').slice(0, 19),
@@ -93,9 +98,8 @@ async function exportCsv() {
   URL.revokeObjectURL(a.href)
   ElMessage.success(`已导出 ${target.length} 条`)
 }
-
 // 行详情
-function showDetail(r: HistoryRecord) {
+function showDetail(r) {
   ElMessageBox.alert(
     `
       时间：${String(r.time).replace('T', ' ').slice(0, 19)}<br/>
@@ -109,7 +113,6 @@ function showDetail(r: HistoryRecord) {
     { dangerouslyUseHTMLString: true, confirmButtonText: '知道了' },
   )
 }
-
 onMounted(load)
 </script>
 
@@ -129,13 +132,30 @@ onMounted(load)
     <!-- 筛选栏 -->
     <el-form inline class="filter-bar">
       <el-form-item label="开始日期">
-        <el-date-picker v-model="query.date_from" type="date" placeholder="开始" value-format="YYYY-MM-DD" style="width: 140px" />
+        <el-date-picker
+          v-model="query.date_from"
+          type="date"
+          placeholder="开始"
+          value-format="YYYY-MM-DD"
+          style="width: 140px"
+        />
       </el-form-item>
       <el-form-item label="结束日期">
-        <el-date-picker v-model="query.date_to" type="date" placeholder="结束" value-format="YYYY-MM-DD" style="width: 140px" />
+        <el-date-picker
+          v-model="query.date_to"
+          type="date"
+          placeholder="结束"
+          value-format="YYYY-MM-DD"
+          style="width: 140px"
+        />
       </el-form-item>
       <el-form-item label="天气">
-        <el-input v-model="query.weather" placeholder="如：雨 / 晴" clearable style="width: 130px" />
+        <el-input
+          v-model="query.weather"
+          placeholder="如：雨 / 晴"
+          clearable
+          style="width: 130px"
+        />
       </el-form-item>
       <el-form-item label="类型">
         <el-select v-model="query.forecast" style="width: 120px" clearable>
@@ -157,7 +177,9 @@ onMounted(load)
     >
       <el-table-column type="selection" width="46" />
       <el-table-column label="时间" width="170">
-        <template #default="{ row }">{{ String(row.time).replace('T', ' ').slice(0, 19) }}</template>
+        <template #default="{ row }">
+          {{ String(row.time).replace('T', ' ').slice(0, 19) }}
+        </template>
       </el-table-column>
       <el-table-column prop="weather_desc" label="天气" width="90">
         <template #default="{ row }">
@@ -168,9 +190,7 @@ onMounted(load)
       </el-table-column>
       <el-table-column label="温度°C" width="110">
         <template #default="{ row }">
-          <template v-if="row.temp_max != null">
-            {{ row.temp_max }} / {{ row.temp_min }}
-          </template>
+          <template v-if="row.temp_max != null">{{ row.temp_max }} / {{ row.temp_min }}</template>
           <template v-else>{{ row.temperature ?? '--' }}</template>
         </template>
       </el-table-column>
