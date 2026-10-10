@@ -110,3 +110,22 @@ API 回归使用真实数据库和完整多智能体图，模型替身覆盖单�
 | 真实公共知识库检索及测试资料清理 | 公共 GET HTTP 200，未返回私有测试资料；唯一标题删除 HTTP 200 |
 
 本地已配置智谱 Embedding Key，但尚未配置 `DASHSCOPE_API_KEY` 或 `QWEN_API_KEY`，因此真实后端验证覆盖无百炼 Key 的 RRF 回退，未验证真实 `gte-rerank-v2` 账号可用性或排序质量。真实数据库 API 回归使用 `respx` 的百炼响应替身，验证候选排序在 Top-K 截断之前执行、排序索引准确映射回本地内容、其他用户和公共资料不发送到私有排序请求，以及鉴权/限流/服务错误/超时/不完整或非法结果回退。浏览器测试使用 mock API。配置真实百炼 Key 与正确地域/空间 API 基址并重启后，可通过非 null 的 `rerank_score` 确认模型排序成功，详见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
+
+## 2026-10-10：14 组真实模型问答及公共知识库迁移修复
+
+用户配置百炼 Key 后，先直接验证智谱 `embedding-3`（1024 维）与百炼 `gte-rerank-v2` 均真实 HTTP 200。公共知识库原有 0 条资料；建立真实索引发现 `0001_initial` 未建立模型声明的 `(source, chunk_index)` 唯一约束，导致 upsert 失败。新增并应用 `0015_knowledge_chunk_unique`，保留已有数据及 ORM 同名约束；旧数据重复时由数据库拒绝并回滚，不自动删资料。
+
+| 检查 | 结果 |
+| --- | --- |
+| `python -m ruff check .` | 通过 |
+| `python -m ruff format --check .` | 201 个文件通过，仅任务前已有的 `embedding_client.py:81` 行尾空格未通过，保留本地编辑 |
+| 新迁移单独 Ruff 与格式检查 | 通过；Alembic 目录不在默认检查范围内 |
+| `tests/api/test_migrations.py` | 2 项通过，增加公共库唯一约束、重复及并发 upsert、已建 ORM 约束兼容的实际数据库断言 |
+| `python -m pytest` | 769 项通过、2 项失败，无跳过；仍为上述两项通知用例 |
+| 实际开发库升级与建立索引 | 修订为 `0015_knowledge_chunk_unique`；16 个文档、33 个分块，使用真实 Embedding 成功写入并保留 |
+| 14 组真实模型检索与回答 | 知识库 API 业务 `code=0`，各返回 5 条真实重排结果；DeepSeek 回答非空，无 Embedding/Reranker 回退 |
+| 12 个范围内问题的相关来源前 3 条命中 | 重排前后均为 12/12；3 个问题第一条片段改变，不能由此断言显著准确率提升 |
+| 2 个资料不足问题 | 故宫实时余票和私人餐厅笔记，模型均明确说明无法确认，没有虚构答案 |
+| 实际运行的 HTTP 后端与聊天接口 | 公共搜索 HTTP 200，重排分数非 null；匿名聊天早茶/广州塔 2 次均 HTTP 200、`code=0`、`intent=knowledge` |
+
+14 组测试使用 FastAPI ASGI 直连、真实 PostgreSQL、真实模型 API；通过项目 `llm_client` 将检索上下文交给 DeepSeek，未执行 Agent 工具决策流程。额外 2 次 `/api/v1/chat` 使用正在运行的 HTTP 服务，覆盖当前 single Agent 入口。资料问答批次采用更严格的依据资料提示词；聊天回答仍有少量未直接被资料支持的补充建议，详见 [完整测试报告](RAG_LIVE_TEST_2026-10-10.md)。匿名聊天不写历史，无临时私有资料或临时服务器；本地 `.env` 与既有 Embedding 客户端编辑保持不变。

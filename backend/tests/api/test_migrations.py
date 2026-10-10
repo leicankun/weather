@@ -18,6 +18,7 @@ from app.db.session import get_db
 from app.main import app
 from app.models.user import User
 from app.models.user_knowledge import UserKnowledge
+from app.services import rag_service
 from app.services.embedding_client import embedding_client
 from tests.conftest import TEST_DB_URL
 
@@ -90,6 +91,47 @@ async def test_fresh_migrations_create_models_and_support_knowledge_api(
                 assert set(Base.metadata.tables[name].columns.keys()) == {
                     column["name"] for column in columns
                 }
+            constraints = await conn.run_sync(
+                lambda c: inspect(c).get_unique_constraints("knowledge_chunks")
+            )
+            assert any(
+                constraint["name"] == "uq_knowledge_source_chunk"
+                and constraint["column_names"] == ["source", "chunk_index"]
+                for constraint in constraints
+            )
+
+        row = {
+            "title": "公共迁移回归",
+            "source": "migration-test.md",
+            "chunk_index": 0,
+            "content": "原始内容",
+            "embedding": [1.0, *([0.0] * 1023)],
+            "meta": {"version": 1},
+        }
+        await rag_service._store_chunks(sessions, [row])
+        updated = {**row, "content": "更新内容", "meta": {"version": 2}}
+        await rag_service._store_chunks(sessions, [updated])
+        async with sessions() as session:
+            saved = (
+                await session.execute(text("SELECT content, meta FROM knowledge_chunks"))
+            ).one()
+            assert saved.content == "更新内容" and saved.meta == {"version": 2}
+
+        # 两个独立会话同时 upsert 同一来源分块，唯一约束防止并发重复插入。
+        first = {**row, "chunk_index": 1, "content": "版本A", "meta": {"version": "A"}}
+        second = {**row, "chunk_index": 1, "content": "版本B", "meta": {"version": "B"}}
+        await asyncio.gather(
+            rag_service._store_chunks(sessions, [first]),
+            rag_service._store_chunks(sessions, [second]),
+        )
+        async with sessions() as session:
+            saved = (
+                await session.execute(
+                    text("SELECT content, meta FROM knowledge_chunks WHERE chunk_index = 1")
+                )
+            ).all()
+            assert len(saved) == 1
+            assert saved[0].content == f"版本{saved[0].meta['version']}"
 
         async with sessions() as session:
             owner = User(username="migration_owner", password_hash="unused")
@@ -132,6 +174,12 @@ async def test_upgrade_preserves_tables_previously_created_by_orm(migration_data
         async with engine.begin() as conn:
             for name in MISSING_TABLES:
                 await conn.run_sync(lambda c, name=name: Base.metadata.tables[name].create(c))
+            await conn.execute(
+                text(
+                    "ALTER TABLE knowledge_chunks ADD CONSTRAINT uq_knowledge_source_chunk "
+                    "UNIQUE (source, chunk_index)"
+                )
+            )
         sessions = async_sessionmaker(engine, expire_on_commit=False)
         async with sessions() as session:
             owner = User(username="legacy_owner", password_hash="unused")

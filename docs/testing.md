@@ -10,6 +10,8 @@
 
 `tests/api/test_migrations.py` 额外创建名称为 `weather_migration_<随机值>_test` 的临时数据库，用 Alembic 从空库迁移到最新版本，验证所有模型表存在及个人知识库接口的增删查、向量检索和用户隔离。另一个用例验证从旧版本升级时保留 ORM 已建表中的数据。测试结束删除临时库；测试账号需有创建数据库权限，迁移还需要 TimescaleDB 扩展。该回归不依赖 `create_all` 初始化，能发现迁移漏建表的问题。
 
+该迁移回归还验证公共知识库的 `(source, chunk_index)` 唯一约束、重复 upsert 更新正文与元数据、两个独立会话并发 upsert 只留下一个分块，以及旧库已有 ORM 同名约束时正常升级。
+
 无数据库的本地验证使用 `python -m pytest --no-db -o addopts= -q`。该模式显式跳过依赖 db/client 等集成夹具的用例，并禁止初始化/清理数据库。默认模式继续运行完整套件，CI 仍使用真实 PostgreSQL。
 
 每次验证的实际通过数、跳过数、环境限制记录在 VALIDATION.md。不能把 no-db 或前端 mock 测试表述成全栈联调成功。
