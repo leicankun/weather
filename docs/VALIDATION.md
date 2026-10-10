@@ -70,3 +70,23 @@
 | 对话落库与清理 | 真实接口查询到 4 条消息（两轮）；验证会话已删除，临时后端已停止 |
 
 API 回归使用真实数据库和完整多智能体图，模型替身覆盖单领域、多领域汇总及通用回答，验证最近 10 条限制与用户/会话/匿名隔离。真实模型验证覆盖通用回答的两轮记忆；没有宣称全部外部工具联调通过。前端未改动，未重复前端检查。目前没有历史摘要，独立图片路径尚未接入历史。
+
+## 2026-10-10：知识库 BM25 + Dense + RRF
+
+公共和个人知识库改为 BM25 与 pgvector 双路召回，再按 RRF 融合排名。新增 `jieba` 中文分词依赖；默认每路召回 30 个候选、RRF 常数 60、最终 Top-K 默认 5。接口保留向量 `similarity`，增加 BM25、RRF 分数与各路排名；个人知识库页面和 Agent 工具使用融合分数。按用户最新要求，本次不做 Reranker。
+
+| 检查 | 结果 |
+| --- | --- |
+| `python -m ruff check .` | 通过 |
+| `python -m ruff format --check .` | 199 个文件通过 |
+| 混合检索单元/API 用例及迁移回归 | 23 项通过（21 项新增回归，2 项迁移回归） |
+| `python -m pytest` | 733 项通过、2 项失败、无跳过；仍为上述两项通知用例 |
+| `npm run check:js` | 通过 |
+| `npm --prefix frontend-user run lint` | 通过 |
+| `npm test` | 5 个文件、18 项通过 |
+| `npm run build` | 用户端和管理端均通过，存在原有大产物提示 |
+| `npm run test:e2e`，Chrome | 8 项通过，使用 mock API 的浏览器契约验证 |
+| 真实 `POST /api/v1/my-knowledge/search` | HTTP 200，测试资料两路均排名 1；`bm25_score=0.395563`、`similarity=0.6956`、`rrf_score=0.03278689` |
+| 真实 `GET /api/v1/knowledge/search` | HTTP 200，未返回同一用户的私有测试资料；测试资料已按唯一标题删除 |
+
+回归验证了 BM25 手算分数、词频饱和与长度惩罚、RRF 按排名累加及片段去重、中文与编号检索、仅关键词召回、零向量、删除后结果变化、公共/个人/不同用户隔离和 API 分数字段。测试中的 Embedding 使用替身；本地未配置有效智谱 Embedding Key，真实接口使用现有字符哈希向量兜底，不能据此宣称外部 Embedding 模型质量通过。无需新增数据库表或迁移，本地 `.env` 未修改。BM25 当前逐次读取当前范围文本并在线评分，规模限制见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。

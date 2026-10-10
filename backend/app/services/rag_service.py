@@ -1,7 +1,7 @@
-"""RAG 知识库服务：向量入库与余弦相似度检索。
+"""RAG 知识库服务：向量入库与 BM25 / 向量混合检索。
 
 - build_index(): 扫描 knowledge_base 文档 -> 分块 -> embedding -> 写入 knowledge_chunks（upsert）
-- search(): 输入查询 -> embedding -> pgvector 余弦距离（<=>）-> 返回 TopK 相关片段
+- search(): BM25 + pgvector 召回 -> RRF 融合 -> 返回 TopK 相关片段
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.knowledge import KnowledgeChunk
 from app.services.embedding_client import embedding_client
+from app.services.hybrid_retrieval import search_hybrid
 from app.services.knowledge_loader import load_documents
 
 
@@ -100,40 +101,11 @@ async def search(
     top_k: int | None = None,
     use_celery_engine: bool = False,
 ) -> list[dict[str, Any]]:
-    """向量语义检索：余弦相似度返回 TopK 相关片段。
-
-    使用 pgvector 的 ``<=>``（余弦距离）运算符，升序排列（距离越小越相似），
-    映射回相似度分数 similarity = 1 - distance。
-    """
-    top_k = top_k or settings.EMBED_TOP_K
+    """双路召回后按 RRF 排名返回，similarity 保留原来的余弦相似度含义。"""
+    top_k = settings.EMBED_TOP_K if top_k is None else top_k
     if not query.strip():
         raise ValueError("查询文本不能为空")
 
-    query_vec = (await embedding_client.embed_texts([query]))[0]
-
     factory = _make_session() if use_celery_engine else AsyncSessionLocal
     async with factory() as db:
-        # 向量文本直接内联（来自本地归一化浮点数组，非用户输入，无注入风险），
-        # 避免 asyncpg 对命名参数与 ::vector 强制转换的语法冲突
-        vec_literal = "[" + ",".join(str(x) for x in query_vec) + "]"
-        stmt = text(
-            f"""
-            SELECT title, source, content, chunk_index, 1 - (embedding <=> '{vec_literal}'::vector) AS similarity
-            FROM knowledge_chunks
-            WHERE embedding IS NOT NULL
-            ORDER BY embedding <=> '{vec_literal}'::vector ASC
-            LIMIT :top_k
-            """
-        )
-        result = await db.execute(stmt, {"top_k": top_k})
-        items = [
-            {
-                "title": row.title,
-                "source": row.source,
-                "content": row.content,
-                "chunk_index": row.chunk_index,
-                "similarity": round(float(row.similarity), 4),
-            }
-            for row in result
-        ]
-    return items
+        return await search_hybrid(db, query, top_k)

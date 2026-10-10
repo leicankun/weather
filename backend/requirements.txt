@@ -12,6 +12,7 @@ celery>=5.4.0
 redis>=5.2.0
 sqlalchemy[asyncio]>=2.0.0
 pgvector>=0.3.0
+jieba>=0.42.1,<0.43
 geoalchemy2>=0.15.0
 alembic>=1.13.3
 langchain-openai>=0.3.0

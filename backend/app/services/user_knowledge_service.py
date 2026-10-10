@@ -1,7 +1,7 @@
 """用户私有知识库服务（多租户 RAG）。
 
 - add_document(): 用户上传文本 -> 分块 -> embedding -> 写入 user_knowledge 表
-- search(): 限定 user_id 的向量语义检索
+- search(): 限定 user_id 的 BM25 / 向量召回及 RRF 排名融合
 
 与公共知识库（rag_service）共用同一套分块器和 embedding 客户端，
 仅存储表与检索范围不同（按 user_id 隔离）。
@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import AsyncSessionLocal
 from app.models.user_knowledge import UserKnowledge
 from app.services.embedding_client import embedding_client
+from app.services.hybrid_retrieval import search_hybrid
 from app.services.knowledge_loader import split_text
 
 
@@ -77,43 +78,19 @@ async def search(
     top_k: int = 5,
     db: AsyncSession | None = None,
 ) -> list[dict[str, Any]]:
-    """在指定用户的私有知识库中做向量检索。"""
+    """两路召回均只使用当前用户资料，并按 RRF 融合排名。"""
     if not query or not query.strip():
         raise ValueError("查询文本不能为空")
-    top_k = max(1, min(10, int(top_k)))
-
-    query_vec = (await embedding_client.embed_texts([query.strip()]))[0]
-    vec_literal = "[" + ",".join(str(x) for x in query_vec) + "]"
+    if user_id is None:
+        raise ValueError("私有知识库检索需要用户 ID")
 
     owns_db = db is None
     session = db or AsyncSessionLocal()
 
-    async def _run(s: AsyncSession) -> list[dict[str, Any]]:
-        stmt = text(
-            f"""
-            SELECT title, source, content, chunk_index, 1 - (embedding <=> '{vec_literal}'::vector) AS similarity
-            FROM user_knowledge
-            WHERE user_id = :user_id AND embedding IS NOT NULL
-            ORDER BY embedding <=> '{vec_literal}'::vector ASC
-            LIMIT :top_k
-            """
-        )
-        result = await s.execute(stmt, {"user_id": user_id, "top_k": top_k})
-        return [
-            {
-                "title": row.title,
-                "source": row.source,
-                "content": row.content,
-                "chunk_index": row.chunk_index,
-                "similarity": round(float(row.similarity), 4),
-            }
-            for row in result
-        ]
-
     if owns_db:
         async with session as s:
-            return await _run(s)
-    return await _run(session)
+            return await search_hybrid(s, query, top_k, user_id=user_id)
+    return await search_hybrid(session, query, top_k, user_id=user_id)
 
 
 async def list_documents(user_id: int, db: AsyncSession | None = None) -> list[dict[str, Any]]:

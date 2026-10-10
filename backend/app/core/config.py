@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend 根目录（config.py 位于 backend/app/core/ 下，向上两级）
@@ -148,6 +149,10 @@ class Settings(BaseSettings):
     EMBED_TIMEOUT: float = 30.0  # embedding 请求超时（秒）
     EMBED_DIM: int = 1024  # 向量维度（与智谱 embedding-3 dimensions=1024 对齐，匹配 Vector(1024)）
     EMBED_TOP_K: int = 5  # 检索返回的 TopK
+    RAG_CANDIDATE_K: int = Field(default=30, ge=1, le=200)  # 每一路召回数量
+    RAG_RRF_K: int = Field(default=60, ge=1)  # RRF 的平滑常数，不是返回条数
+    RAG_BM25_K1: float = Field(default=1.2, gt=0, allow_inf_nan=False)
+    RAG_BM25_B: float = Field(default=0.75, ge=0, le=1, allow_inf_nan=False)
 
     # ===== Web Push 通知（Day 34，VAPID 协议）=====
     VAPID_PRIVATE_KEY: str = ""  # base64url 编码的 P-256 私钥（不入库）

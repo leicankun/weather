@@ -102,7 +102,7 @@ onMounted(load)
         <div v-for="(hit, i) in hits || []" :key="i" class="list-card">
           <h3>{{ hit.title }}</h3>
           <p class="small">{{ hit.content }}</p>
-          <small class="muted">相关度 {{ hit.similarity }}</small>
+          <small class="muted">相关度 {{ hit.rrf_score ?? hit.similarity }}</small>
         </div>
         <p v-if="hits?.length === 0" class="empty-message">没有找到相关资料</p>
       </section>

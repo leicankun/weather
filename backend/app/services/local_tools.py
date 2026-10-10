@@ -45,7 +45,7 @@ async def search_my_plans(query: str, top_k: int = 5) -> str:
     for it in items:
         content = (it.get("content") or "")[:200].replace("\n", " ")
         lines.append(
-            f"- [{it.get('title', '')}]（相似度 {it.get('similarity', 0):.2f}）{content}..."
+            f"- [{it.get('title', '')}]（融合得分 {it.get('rrf_score', 0):.4f}）{content}..."
         )
     return "\n".join(lines)
 

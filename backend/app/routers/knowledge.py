@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentUser
@@ -40,7 +40,7 @@ async def search(
     body: SearchRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
-    """语义检索（公开）：输入问题，返回 Top5 相关知识片段。"""
+    """公开知识库 BM25 + 向量混合检索，返回 RRF 排名前 TopK 片段。"""
     if not body.query.strip():
         raise HTTPException(status_code=400, detail="查询文本不能为空")
     items = await rag_service.search(body.query, top_k=body.top_k)
@@ -50,11 +50,11 @@ async def search(
 
 @router.get("/search", response_model=dict)
 async def search_get(
-    q: str,
+    q: Annotated[str, Query(min_length=1, max_length=2000)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    top_k: int = 5,
+    top_k: Annotated[int, Query(ge=1, le=10)] = 5,
 ) -> dict:
-    """语义检索（公开，GET 形式，便于快速验证）。"""
+    """混合检索的 GET 入口。"""
     if not q.strip():
         raise HTTPException(status_code=400, detail="查询文本不能为空")
     items = await rag_service.search(q, top_k=top_k)

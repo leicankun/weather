@@ -51,6 +51,8 @@ setup 会创建 backend/.venv、安装依赖，首次生成 backend/.env 和随�
 
 使用多智能体多轮文本对话时，设置 `AGENT_MODE=multi` 并重启后端。登录后在同一个会话中继续提问；后端自动保存每轮提问和最终回答，并读取最近 10 条历史消息。客户端调用 `/api/v1/chat` 或 `/api/v1/chat/stream` 时，需要持续传入相同的 `conversation_id`，普通接口会返回该 ID；流式客户端应自行生成并复用。新会话和不同用户的历史互不共享，匿名对话不持久化；目前未做历史摘要。
 
+知识库默认使用 BM25 + 向量混合检索及 RRF 融合，包含 `jieba` 中文分词依赖。更新后用 backend 的虚拟环境安装最新 `requirements.txt` 并重启后端、运行中的 worker 和独立 MCP 服务；已有知识库数据可直接检索，无需额外迁移或重新生成向量。参数和返回分数含义见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
+
 ## 全容器运行
 
 先运行 setup 或按 backend/.env.example 创建 backend/.env，然后：

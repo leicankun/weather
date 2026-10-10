@@ -1,6 +1,6 @@
 """RAG 知识库模块 Schema。"""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IndexResult(BaseModel):
@@ -13,12 +13,16 @@ class IndexResult(BaseModel):
 
 class SearchHit(BaseModel):
     title: str
-    source: str
+    source: str | None
     content: str
     chunk_index: int
-    similarity: float
+    similarity: float | None  # 仅 BM25 召回的片段可能没有向量相似度
+    bm25_score: float
+    rrf_score: float
+    dense_rank: int | None
+    bm25_rank: int | None
 
 
 class SearchRequest(BaseModel):
-    query: str
-    top_k: int | None = None
+    query: str = Field(min_length=1, max_length=2000)
+    top_k: int | None = Field(default=None, ge=1, le=10)
