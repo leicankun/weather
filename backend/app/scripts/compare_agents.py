@@ -26,6 +26,7 @@ from langchain_core.callbacks.usage import UsageMetadataCallbackHandler
 from app.core.config import settings
 from app.services import agent, multi_agent
 from app.services.agent_registry import route_domains
+from app.services.user_context import reset_current_user_id, set_current_user_id
 
 # 覆盖各类路由情形的代表性问题
 QUESTIONS: list[tuple[str, str]] = [
@@ -43,42 +44,85 @@ class CountCallback(BaseCallbackHandler):
     def __init__(self) -> None:
         self.llm_calls = 0
         self.tool_calls = 0
+        self.tool_trace: list[dict] = []
+        self._runs: dict[str, dict] = {}
+
+    def on_chat_model_start(self, *args: Any, **kwargs: Any) -> None:
+        self.llm_calls += 1
 
     def on_llm_start(self, *args: Any, **kwargs: Any) -> None:
         self.llm_calls += 1
 
-    def on_tool_start(self, *args: Any, **kwargs: Any) -> None:
+    def on_tool_start(self, serialized, input_str, *, run_id, **kwargs: Any) -> None:
         self.tool_calls += 1
+        entry = {
+            "name": serialized.get("name", ""),
+            "input": input_str,
+            "node": (kwargs.get("metadata") or {}).get("langgraph_node"),
+            "output": None,
+            "error": None,
+        }
+        self.tool_trace.append(entry)
+        self._runs[str(run_id)] = entry
+
+    def on_tool_end(self, output, *, run_id, **kwargs: Any) -> None:
+        entry = self._runs.get(str(run_id))
+        if entry is not None:
+            content = getattr(output, "content", output)
+            entry["output"] = str(content)[:24000]
+
+    def on_tool_error(self, error, *, run_id, **kwargs: Any) -> None:
+        entry = self._runs.get(str(run_id))
+        if entry is not None:
+            entry["error"] = type(error).__name__
 
 
-async def _run_single(question: str) -> dict[str, Any]:
+async def _run_single(
+    question: str, *, history=None, memory_context="", user_id=None
+) -> dict[str, Any]:
     """跑单 Agent（直接调图，便于挂 callback）。"""
     counter = CountCallback()
     usage = UsageMetadataCallbackHandler()
     graph = await agent._get_agent()
-    initial = agent._build_initial_state(question)
+    initial = agent._build_initial_state(question, history, memory_context)
     started = time.perf_counter()
-    result = await graph.ainvoke(initial, config={"callbacks": [counter, usage]})
+    token = set_current_user_id(user_id)
+    try:
+        result = await graph.ainvoke(initial, config={"callbacks": [counter, usage]})
+    finally:
+        reset_current_user_id(token)
     return _stat(result.get("answer", ""), counter, usage, time.perf_counter() - started)
 
 
-async def _run_multi(question: str) -> dict[str, Any]:
+async def _run_multi(
+    question: str, *, history=None, memory_context="", user_id=None
+) -> dict[str, Any]:
     """跑多 Agent。"""
     counter = CountCallback()
     usage = UsageMetadataCallbackHandler()
     graph = await multi_agent._get_graph()
     initial = {
         "question": question,
-        "domains": [],
+        "domains": None,
+        "history": history or [],
+        "memory_context": memory_context,
         "domain_answers": {},
         "metrics": {},
         "answer": "",
         "error": "",
     }
     started = time.perf_counter()
-    result = await graph.ainvoke(initial, config={"callbacks": [counter, usage]})
+    token = set_current_user_id(user_id)
+    try:
+        result = await graph.ainvoke(initial, config={"callbacks": [counter, usage]})
+    finally:
+        reset_current_user_id(token)
     answer = result.get("answer") or multi_agent.fallback_merge(result.get("domain_answers") or {})
-    return _stat(answer, counter, usage, time.perf_counter() - started)
+    return {
+        **_stat(answer, counter, usage, time.perf_counter() - started),
+        "domains": result.get("domains", []),
+        "domain_answers": result.get("domain_answers", {}),
+    }
 
 
 def _stat(answer: str, counter: CountCallback, usage: Any, seconds: float) -> dict[str, Any]:
@@ -92,6 +136,7 @@ def _stat(answer: str, counter: CountCallback, usage: Any, seconds: float) -> di
         "tokens": prompt + completion,
         "len": len(answer or ""),
         "answer": answer or "",
+        "tool_trace": counter.tool_trace,
     }
 
 
@@ -146,8 +191,8 @@ async def main() -> int:
             f"总耗时：单 Agent {single_total} ms / 多 Agent {multi_total} ms "
             f"（{multi_total / single_total:.2f}x）"
         )
-    print("\n解读提示：多 Agent 的收益不在单域问题上——那里它只是多了一层路由，")
-    print("而在于复合问题的覆盖完整度（每个领域只带自己的工具，选错工具的概率更低）。")
+    print("\n解读提示：耗时与 token 之外，还需核对回答覆盖了哪些问题、信息是否有工具依据。")
+    print("多 Agent 与单 Agent 使用相同的数据源；更长的回答不代表获得了独有信息。")
     return 0
 
 

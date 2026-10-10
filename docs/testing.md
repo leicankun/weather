@@ -16,6 +16,8 @@
 
 每次验证的实际通过数、跳过数、环境限制记录在 VALIDATION.md。不能把 no-db 或前端 mock 测试表述成全栈联调成功。
 
+单 / 多 Agent 对照入口回归：`python -m pytest tests/unit/test_compare_agents.py tests/unit/test_multi_agent.py tests/unit/test_agent_intent.py --no-db -o addopts= -q`，验证初始路由、相同背景与用户身份、真实图执行及工具追踪。真实模型对照使用 `python -m app.scripts.compare_agents_live`：12 个问题加 3 次重复、30 份回答，使用开发库临时合成账号和真实付费 API，结束清理账号；不修改 `.env` 或保存模型回答到聊天历史。报告默认覆盖 `docs/AGENT_COMPARISON_<日期>.json`；人工评估见 [2026-10-10 对照报告](AGENT_COMPARISON_2026-10-10.md)，不得把回退路线估算或无依据的新增内容算作多 Agent 优势。
+
 双层记忆回归：`python -m pytest tests/api/test_memory.py tests/api/test_chat_history.py tests/api/test_migrations.py -o addopts= -q`。使用真实 PostgreSQL 和单/多智能体图，模型替身覆盖普通/SSE 跨会话卡片、超过 10 条的历史回忆、证据/角色/用户隔离、真实两路 SQL 与 rerank HTTP 契约、并发更新/回填、清空期间在途写入、删除来源级联、预算与故障降级。全局默认关闭自动记忆外部调用，这些用例显式开启并替换模型。
 
 真实模型验收：backend 中 `python -m app.scripts.verify_memory`，使用开发库、真实对话/Embedding/rerank API 和临时合成账号；会产生 API 调用费用，不作为 CI 用例。覆盖新事实、偏好更正、跨会话回忆、假设过滤、单/多模式、用户隔离和清空后的回填，输出到 `docs/MEMORY_LIVE_RESULTS_2026-10-10.json`，结束时清理临时账号。
