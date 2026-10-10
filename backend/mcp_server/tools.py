@@ -109,7 +109,7 @@ async def search_news(keyword: str, category: str | None = None, limit: int = 5)
 
 
 async def search_knowledge(query: str, top_k: int = 5) -> str:
-    """从知识库（RAG）用 BM25 / 向量双路召回与 RRF 融合检索相关内容。
+    """从知识库（RAG）用 BM25 / 向量召回、RRF 融合及模型重排序检索相关内容。
 
     知识库覆盖：广州气候、美食、交通、景点、住宿、穿搭、天气出行规划等。
     适合回答"广州哪里好玩""下雨天穿什么""广州美食推荐"等需要背景知识的问题。
@@ -130,9 +130,10 @@ async def search_knowledge(query: str, top_k: int = 5) -> str:
     lines = [f"知识库检索到 {len(items)} 条相关内容："]
     for it in items:
         content = (it.get("content") or "")[:200].replace("\n", " ")
-        lines.append(
-            f"- [{it.get('title', '')}]（融合得分 {it.get('rrf_score', 0):.4f}）{content}..."
-        )
+        score = it.get("rerank_score")
+        label = "重排得分" if score is not None else "融合得分"
+        score = it.get("rrf_score", 0) if score is None else score
+        lines.append(f"- [{it.get('title', '')}]（{label} {score:.4f}）{content}...")
     return "\n".join(lines)
 
 

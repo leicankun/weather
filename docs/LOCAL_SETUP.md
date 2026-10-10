@@ -43,6 +43,8 @@ setup 会创建 backend/.venv、安装依赖，首次生成 backend/.env 和随�
 | AGENT_MODE | single：单 Agent 工具循环；multi：Supervisor + 领域 Agent |
 | AMAP_API_KEY | 真实路线和地点查询 |
 | ZHIPU_API_KEY | 语义向量与默认视觉模型；未配置时的本地向量回退不等同于语义模型 |
+| DASHSCOPE_API_KEY | 百炼 `gte-rerank-v2` 重排序；为空时尝试 QWEN_API_KEY，与智谱 Key 分开 |
+| RERANK_BASE_URL | 百炼原生 API 基址，结尾为 /api/v1；工作空间 Key 使用对应空间及地域的地址 |
 | WEATHER_PROVIDER | 默认 open_meteo；配置和风后可改 qweather |
 | QWEATHER_API_KEY、QWEATHER_BASE_URL | 和风 API 凭据和账号对应的服务地址 |
 | TAVILY_API_KEY | 联网搜索，未配置时尝试项目原有回退源 |
@@ -51,7 +53,7 @@ setup 会创建 backend/.venv、安装依赖，首次生成 backend/.env 和随�
 
 使用多智能体多轮文本对话时，设置 `AGENT_MODE=multi` 并重启后端。登录后在同一个会话中继续提问；后端自动保存每轮提问和最终回答，并读取最近 10 条历史消息。客户端调用 `/api/v1/chat` 或 `/api/v1/chat/stream` 时，需要持续传入相同的 `conversation_id`，普通接口会返回该 ID；流式客户端应自行生成并复用。新会话和不同用户的历史互不共享，匿名对话不持久化；目前未做历史摘要。
 
-知识库默认使用 BM25 + 向量混合检索及 RRF 融合，包含 `jieba` 中文分词依赖。更新后用 backend 的虚拟环境安装最新 `requirements.txt` 并重启后端、运行中的 worker 和独立 MCP 服务；已有知识库数据可直接检索，无需额外迁移或重新生成向量。参数和返回分数含义见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
+知识库默认使用 BM25 + 向量混合检索、RRF 融合及 `gte-rerank-v2` 重排序，包含 `jieba` 中文分词依赖。配置百炼 Key 并重启后端、运行中的 worker 和独立 MCP 服务即可启用重排，不需要安装 DashScope SDK 或新增迁移。缺少百炼 Key 或排序失败时返回 RRF 结果。仅为启用 BM25/重排序无需重新生成向量；从本地兜底向量切换至智谱真实 Embedding 时，仍需重建已有资料向量。参数、配置示例和返回分数含义见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
 
 ## 全容器运行
 

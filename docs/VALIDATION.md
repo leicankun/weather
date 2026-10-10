@@ -90,3 +90,23 @@ API 回归使用真实数据库和完整多智能体图，模型替身覆盖单�
 | 真实 `GET /api/v1/knowledge/search` | HTTP 200，未返回同一用户的私有测试资料；测试资料已按唯一标题删除 |
 
 回归验证了 BM25 手算分数、词频饱和与长度惩罚、RRF 按排名累加及片段去重、中文与编号检索、仅关键词召回、零向量、删除后结果变化、公共/个人/不同用户隔离和 API 分数字段。测试中的 Embedding 使用替身；本地未配置有效智谱 Embedding Key，真实接口使用现有字符哈希向量兜底，不能据此宣称外部 Embedding 模型质量通过。无需新增数据库表或迁移，本地 `.env` 未修改。BM25 当前逐次读取当前范围文本并在线评分，规模限制见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
+
+## 2026-10-10：gte-rerank-v2 重排序
+
+公共和个人知识库在 RRF 之后接入百炼原生文本排序 API，默认对融合前 30 条候选评分，再取最终 Top-K。保留原有分数，新增 `rerank_score`、`rerank_rank`；个人页面及 MCP/本地工具优先使用重排分数。未启用、无百炼 Key、模型超时或无效响应时整批保留 RRF 顺序，不填充假分数。无新增依赖或数据库迁移；未修改本地 `.env`。
+
+| 检查 | 结果 |
+| --- | --- |
+| `python -m ruff check .` | 通过 |
+| `python -m ruff format --check .` | 201 个文件通过；仅开始本次任务前已存在的 `embedding_client.py:81` 行尾空格未通过，保留该本地编辑 |
+| 本次修改/新增的 12 个 Python 文件单独格式检查 | 通过 |
+| 混合检索、重排序及迁移相关回归 | 59 项通过，其中 36 项新增重排回归 |
+| `python -m pytest` | 769 项通过、2 项失败、无跳过；失败仍是前述 VAPID 公钥和默认通知偏好用例 |
+| `npm run check:js`、用户端 lint | 通过 |
+| `npm test` | 5 个文件、18 项通过 |
+| `npm run build` | 用户端及管理端均通过，保留原有大产物提示 |
+| `npm run test:e2e`，Chrome | 9 项通过；新增知识库检索验证模型分数优先、零分与 null 回退 |
+| 真实个人知识库上传/检索 | 上传 HTTP 201、检索 HTTP 200；唯一测试资料命中，`rrf_score=0.03278689`、`similarity=0.5971`、`rerank_score=null`、`rerank_rank=null` |
+| 真实公共知识库检索及测试资料清理 | 公共 GET HTTP 200，未返回私有测试资料；唯一标题删除 HTTP 200 |
+
+本地已配置智谱 Embedding Key，但尚未配置 `DASHSCOPE_API_KEY` 或 `QWEN_API_KEY`，因此真实后端验证覆盖无百炼 Key 的 RRF 回退，未验证真实 `gte-rerank-v2` 账号可用性或排序质量。真实数据库 API 回归使用 `respx` 的百炼响应替身，验证候选排序在 Top-K 截断之前执行、排序索引准确映射回本地内容、其他用户和公共资料不发送到私有排序请求，以及鉴权/限流/服务错误/超时/不完整或非法结果回退。浏览器测试使用 mock API。配置真实百炼 Key 与正确地域/空间 API 基址并重启后，可通过非 null 的 `rerank_score` 确认模型排序成功，详见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。

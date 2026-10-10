@@ -147,6 +147,14 @@ def pytest_sessionstart(session) -> None:
 # ===== fixture =====
 
 
+@pytest.fixture(autouse=True)
+def _disable_external_rerank(monkeypatch):
+    """本地百炼配置不影响回归；重排序用例显式开启并拦截 HTTP。"""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "RERANK_ENABLED", False)
+
+
 @pytest_asyncio.fixture
 async def db():
     """直连测试库的会话，用于**直接造数据 / 断言落库结果**。"""

@@ -78,7 +78,7 @@ async def search(
     top_k: int = 5,
     db: AsyncSession | None = None,
 ) -> list[dict[str, Any]]:
-    """两路召回均只使用当前用户资料，并按 RRF 融合排名。"""
+    """两路召回、RRF 融合及模型重排序均只使用当前用户资料。"""
     if not query or not query.strip():
         raise ValueError("查询文本不能为空")
     if user_id is None:

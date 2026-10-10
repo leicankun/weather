@@ -21,6 +21,8 @@ class SearchHit(BaseModel):
     rrf_score: float
     dense_rank: int | None
     bm25_rank: int | None
+    rerank_score: float | None = None  # 未启用或失败时保持 RRF 排名，分数为空
+    rerank_rank: int | None = None
 
 
 class SearchRequest(BaseModel):

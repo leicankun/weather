@@ -263,3 +263,32 @@ test('all remaining routes load without runtime exceptions', async ({ page }) =>
   }
   expect(errors).toEqual([])
 })
+
+test('knowledge search displays rerank scores including zero and falls back to RRF', async ({ page }) => {
+  await mockApi(page)
+  await page.route('**/api/v1/my-knowledge/search', (route) =>
+    route.fulfill({
+      json: {
+        code: 0,
+        message: 'ok',
+        data: {
+          items: [
+            { title: '模型优先', content: '室内博物馆', rerank_score: 0.9, rrf_score: 0.02 },
+            { title: '模型零分', content: '其他资料', rerank_score: 0, rrf_score: 0.03 },
+            { title: '融合回退', content: '雨天计划', rerank_score: null, rrf_score: 0.015 },
+          ],
+          total: 3,
+        },
+      },
+    }),
+  )
+  await page.goto('/my-knowledge')
+  await page.getByPlaceholder('例如：我收藏的餐厅有哪些？').fill('下雨去哪里')
+  await page.getByRole('button', { name: '检索', exact: true }).click()
+  const hits = page.locator('.list-card').filter({ has: page.locator('.small') })
+  await expect(hits).toHaveCount(3)
+  await expect(hits.nth(0)).toContainText('模型优先')
+  await expect(hits.nth(0)).toContainText('相关度 0.9')
+  await expect(hits.nth(1).locator('small')).toHaveText('相关度 0')
+  await expect(hits.nth(2)).toContainText('相关度 0.015')
+})

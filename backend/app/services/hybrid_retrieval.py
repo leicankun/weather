@@ -1,4 +1,4 @@
-"""BM25 + pgvector 双路召回，以 RRF 融合；两路严格共用检索范围。"""
+"""BM25 + pgvector 双路召回 → RRF → 百炼重排序；两路严格共用检索范围。"""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.models.knowledge import KnowledgeChunk
 from app.models.user_knowledge import UserKnowledge
 from app.services.embedding_client import embedding_client
+from app.services.rerank_client import rerank_client
 
 # 搜索模式兼顾中文词语、复合词与字母数字编号。
 _tokenizer = jieba.Tokenizer()
@@ -153,7 +154,9 @@ async def search_hybrid(
         )
         dense = [dict(row) for row in rows.mappings() if math.isfinite(float(row["similarity"]))]
 
-    fused = reciprocal_rank_fusion(dense, sparse, k=settings.RAG_RRF_K)[:top_k]
+    fused = reciprocal_rank_fusion(dense, sparse, k=settings.RAG_RRF_K)
+    candidates = fused[: max(top_k, settings.RERANK_CANDIDATE_K)]
+    fused = (await rerank_client.rerank(query, candidates))[:top_k]
     for item in fused:
         item["rrf_score"] = round(item["rrf_score"], 8)
         item["bm25_score"] = round(item["bm25_score"], 6)

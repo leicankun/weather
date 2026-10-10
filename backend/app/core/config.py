@@ -154,6 +154,14 @@ class Settings(BaseSettings):
     RAG_BM25_K1: float = Field(default=1.2, gt=0, allow_inf_nan=False)
     RAG_BM25_B: float = Field(default=0.75, ge=0, le=1, allow_inf_nan=False)
 
+    # 百炼文本排序接口，与智谱 Embedding 分开配置；也可复用通义的 Key。
+    DASHSCOPE_API_KEY: str = ""
+    RERANK_ENABLED: bool = True
+    RERANK_MODEL: str = "gte-rerank-v2"
+    RERANK_BASE_URL: str = "https://dashscope.aliyuncs.com/api/v1"
+    RERANK_CANDIDATE_K: int = Field(default=30, ge=1, le=200)
+    RERANK_TIMEOUT: float = Field(default=15.0, gt=0, le=60, allow_inf_nan=False)
+
     # ===== Web Push 通知（Day 34，VAPID 协议）=====
     VAPID_PRIVATE_KEY: str = ""  # base64url 编码的 P-256 私钥（不入库）
     VAPID_PUBLIC_KEY: str = ""  # 前端 subscribe 用的 applicationServerKey

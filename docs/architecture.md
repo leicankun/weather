@@ -8,7 +8,7 @@ Vue 页面 → api/*.js → FastAPI routers → services / skills → PostgreSQL
 
 AI 对话 → agent.py（single）或 multi_agent.py（multi）→ LangChain 模型工具调用 → MCP 公共工具 / 本地用户工具 → SSE 返回前端。默认 single，AGENT_MODE=multi 启用领域编排。
 
-公共与个人知识库共用 BM25 + pgvector 双路召回，再以 RRF 融合排名。BM25 使用中文搜索分词；私有语料和两路检索均按用户隔离。每路默认 30 个候选，融合后取最终 Top-K，暂不做 Reranker。配置、分数含义和规模限制见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
+公共与个人知识库共用 BM25 + pgvector 双路召回，再以 RRF 融合排名，随后调用百炼 `gte-rerank-v2` 对融合候选重排序。BM25 使用中文搜索分词；私有语料、两路检索和发送到排序模型的候选均按用户隔离。每路默认召回 30 条，RRF 前 30 条参与重排，最后取 Top-K；未配置百炼 Key、显式关闭或调用失败时保留 RRF 顺序。配置、分数含义和规模限制见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
 
 ## 前端目录
 

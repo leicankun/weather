@@ -17,3 +17,5 @@
 多智能体多轮对话回归：`python -m pytest tests/api/test_chat_history.py tests/unit/test_multi_agent.py tests/unit/test_chat_history_service.py -o addopts= -q`。API 用例使用真实 PostgreSQL 和完整 LangGraph 图，模型与外部工具使用替身，覆盖普通及 SSE 两轮对话、领域与汇总节点接收历史、通用回答、最近 10 条限制、用户/会话隔离和匿名请求。单元用例另覆盖省略问题的上下文路由及工具循环不改写共享历史。
 
 混合检索回归：`python -m pytest tests/unit/test_hybrid_retrieval.py tests/api/test_hybrid_knowledge.py tests/api/test_migrations.py -o addopts= -q`。包含 BM25 数学性质、中文及编号分词、RRF 融合和去重、两路互补、无向量召回、用户/公共私有隔离、删除后结果变化及 API 返回分数字段；数据库查询真实执行，Embedding API 使用替身。详细链路见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
+
+重排序回归：`python -m pytest tests/unit/test_rerank_client.py tests/api/test_rerank_knowledge.py -o addopts= -q`。真实数据库和 API 链路接入百炼 HTTP 替身，覆盖请求格式、输入索引映射、最终 Top-K 之前重排、私有候选隔离、关闭/无 Key、超时、401/429/503、无效响应和异常分数降级。测试全局默认关闭外部重排，新用例显式开启并通过 `respx` 拦截，开发配置不触发真实模型调用。模型能力和账号可用性仍须通过配置真实 Key 的接口联调确认。

@@ -40,7 +40,7 @@ async def search(
     body: SearchRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
-    """公开知识库 BM25 + 向量混合检索，返回 RRF 排名前 TopK 片段。"""
+    """公开知识库混合召回、RRF 融合及模型重排序，返回最终 TopK 片段。"""
     if not body.query.strip():
         raise HTTPException(status_code=400, detail="查询文本不能为空")
     items = await rag_service.search(body.query, top_k=body.top_k)

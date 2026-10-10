@@ -44,9 +44,10 @@ async def search_my_plans(query: str, top_k: int = 5) -> str:
     lines = [f"你的个人知识库检索到 {len(items)} 条相关内容："]
     for it in items:
         content = (it.get("content") or "")[:200].replace("\n", " ")
-        lines.append(
-            f"- [{it.get('title', '')}]（融合得分 {it.get('rrf_score', 0):.4f}）{content}..."
-        )
+        score = it.get("rerank_score")
+        label = "重排得分" if score is not None else "融合得分"
+        score = it.get("rrf_score", 0) if score is None else score
+        lines.append(f"- [{it.get('title', '')}]（{label} {score:.4f}）{content}...")
     return "\n".join(lines)
 
 

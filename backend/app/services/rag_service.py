@@ -1,7 +1,7 @@
 """RAG 知识库服务：向量入库与 BM25 / 向量混合检索。
 
 - build_index(): 扫描 knowledge_base 文档 -> 分块 -> embedding -> 写入 knowledge_chunks（upsert）
-- search(): BM25 + pgvector 召回 -> RRF 融合 -> 返回 TopK 相关片段
+- search(): BM25 + pgvector 召回 -> RRF 融合 -> gte-rerank-v2 重排 -> TopK
 """
 
 from __future__ import annotations
