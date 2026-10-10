@@ -107,6 +107,8 @@ async def _run_multi(
         "history": history or [],
         "memory_context": memory_context,
         "domain_answers": {},
+        "domain_evidence": {},
+        "verification": {},
         "metrics": {},
         "answer": "",
         "error": "",
@@ -122,6 +124,7 @@ async def _run_multi(
         **_stat(answer, counter, usage, time.perf_counter() - started),
         "domains": result.get("domains", []),
         "domain_answers": result.get("domain_answers", {}),
+        "verification": result.get("verification", {}),
     }
 
 

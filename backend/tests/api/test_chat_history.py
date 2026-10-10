@@ -23,6 +23,14 @@ class HistoryModel(GenericFakeChatModel):
         return self
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        if "独立的回答验证员" in messages[0].content:
+            return ChatResult(
+                generations=[
+                    ChatGeneration(
+                        message=AIMessage(content='{"passed":true,"issues":[],"revised_answer":""}')
+                    )
+                ]
+            )
         self.calls.append(list(messages))
         prior_users = [message.content for message in messages[1:-1] if message.type == "human"]
         answer = f"前文：{prior_users[-1]}" if prior_users else "已记录本轮信息"

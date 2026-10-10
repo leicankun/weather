@@ -16,6 +16,8 @@
 
 每次验证的实际通过数、跳过数、环境限制记录在 VALIDATION.md。不能把 no-db 或前端 mock 测试表述成全栈联调成功。
 
+多智能体回答核验：`python -m pytest tests/unit/test_answer_verification.py tests/unit/test_multi_agent.py tests/unit/test_compare_agents.py --no-db -o addopts= -q`，覆盖独立核验、工具证据交接、修正复查、异常不发布及 SSE 草稿隔离。真实模型与普通/SSE 接口验收：`python -m app.scripts.verify_multi_agent`，会调用付费 API；已有输出拒绝覆盖，可传 `--output` 指定新路径。测试方法与模型漏检边界见 [核验文档](AGENT_VERIFICATION.md) 和 [实际验收](AGENT_VERIFICATION_LIVE_2026-10-10.md)。
+
 单 / 多 Agent 对照入口回归：`python -m pytest tests/unit/test_compare_agents.py tests/unit/test_multi_agent.py tests/unit/test_agent_intent.py --no-db -o addopts= -q`，验证初始路由、相同背景与用户身份、真实图执行及工具追踪。真实模型对照使用 `python -m app.scripts.compare_agents_live`：12 个问题加 3 次重复、30 份回答，使用开发库临时合成账号和真实付费 API，结束清理账号；不修改 `.env` 或保存模型回答到聊天历史。报告默认覆盖 `docs/AGENT_COMPARISON_<日期>.json`；人工评估见 [2026-10-10 对照报告](AGENT_COMPARISON_2026-10-10.md)，不得把回退路线估算或无依据的新增内容算作多 Agent 优势。
 
 补齐高德 / Tavily 后的相同问题复测见 [WITH_KEYS 报告](AGENT_COMPARISON_2026-10-10_WITH_KEYS.md)。原基线保留；额外验证 API 业务成功及搜索来源、部分路线缺失、费用 / 日期语义，并保留脱敏服务观察。对照入口、意图、多智能体和高德 / 搜索相关回归：`python -m pytest tests/unit/test_compare_agents.py tests/unit/test_multi_agent.py tests/unit/test_agent_intent.py tests/unit/test_amap_client.py tests/unit/test_web_search_service.py --no-db -o addopts= -q`。

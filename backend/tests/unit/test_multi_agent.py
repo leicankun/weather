@@ -8,6 +8,7 @@
 要断言的是"我们怎么组织这些调用"。
 """
 
+import json
 from typing import Any
 
 import pytest
@@ -90,8 +91,12 @@ class FakeLLM:
         return None
 
     async def ainvoke(self, messages: list) -> AIMessage:
-        self.capture.setdefault("messages", []).append(list(messages))
         system = _content_of(messages[0]) if messages else ""
+        if "独立的回答验证员" in system:
+            self.recorder.append("verify")
+            self.capture.setdefault("reviews", []).append(json.loads(_content_of(messages[-1])))
+            return AIMessage(content='{"passed":true,"issues":[],"revised_answer":""}')
+        self.capture.setdefault("messages", []).append(list(messages))
 
         # 脚本优先：测试"工具循环"时要能精确控制每一轮返回什么
         if self.script:
@@ -253,9 +258,10 @@ class TestChatMultiGraph:
 
         assert result["domains"] == ["weather"]
         assert result["answer"] == "天气回答"
-        # 关键：只有领域节点跑过，没有 synthesize——单域直通省掉一次 LLM 调用
-        assert recorder == ["bind:get_weather,get_forecast", "weather"]
-        assert result["metrics"]["llm_calls"] == 1
+        # 单域跳过汇总，仍经独立核验。
+        assert recorder == ["bind:get_weather,get_forecast", "weather", "verify"]
+        assert result["metrics"]["llm_calls"] == 2
+        assert result["verification"]["status"] == "passed"
 
     async def test_复合问题并行执行多个领域再汇总(self, monkeypatch):
         recorder: list[str] = []
@@ -268,8 +274,8 @@ class TestChatMultiGraph:
         assert result["answer"] == "汇总后的回答"
         assert "synthesize" in recorder
         assert {"weather", "outfit", "route"} <= set(recorder)
-        # 3 个领域各 1 次 + 汇总 1 次
-        assert result["metrics"]["llm_calls"] == 4
+        # 3 个领域各 1 次 + 汇总 1 次 + 核验 1 次
+        assert result["metrics"]["llm_calls"] == 5
 
     async def test_闲聊走通用回答且不绑工具(self, monkeypatch):
         recorder: list[str] = []
@@ -363,6 +369,9 @@ class TestMultiTurnHistory:
                 item["content"] for item in history
             ]
             assert question in messages[-1].content
+        for review in capture.get("reviews", []):
+            assert review["history"] == history
+            assert review["question"] == question
 
     async def test_省略问题路由读取前文而不拼接关键词(self, monkeypatch):
         history = [
@@ -407,8 +416,8 @@ class TestPureHelpers:
         assert multi_agent.should_synthesize(["weather", "outfit"]) is True
 
     def test_流式只转发最终产出节点(self):
-        assert multi_agent.stream_source_node(["weather"]) == "domain_weather"
-        assert multi_agent.stream_source_node(["weather", "outfit"]) == "synthesize"
+        assert multi_agent.stream_source_node(["weather"]) == "verify"
+        assert multi_agent.stream_source_node(["weather", "outfit"]) == "verify"
         assert multi_agent.stream_source_node([]) == "general"
 
     def test_领域映射回旧意图标签(self):

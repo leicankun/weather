@@ -4,14 +4,13 @@
 
     START → supervisor（路由：命中哪些领域）
               ├─ 0 个领域 → general（通用回答，不绑工具）
-              ├─ 1 个领域 → {domain} → END           ← 直通，不合成
-              └─ ≥2 领域  → {domain A, domain B} 并行 → synthesize → END
+              ├─ 1 个领域 → {domain} → verify → END
+              └─ ≥2 领域  → {domain A, domain B} 并行 → synthesize → verify → END
 
 三个设计判断：
 
-1. **单域直通不合成**：只有一个领域命中时，领域 Agent 的回答本身就是最终答案。
-   再走一次"汇总 LLM"只会让它复述一遍——多一次调用、多一份延迟，
-   还多一次改写走样的机会。省掉这步是白赚的。
+1. **单域跳过汇总**：只有一个领域命中时，领域 Agent 的回答作为待验证草稿。
+   跳过汇总，仍须经过独立的证据验证后才发布。
 
 2. **多域并行扇出**：LangGraph 的条件边返回**列表**即并行执行多个节点；
    所有领域节点都连到 synthesize，LangGraph 会在它们全部完成后才执行它
@@ -45,7 +44,16 @@ from pydantic import BaseModel, Field
 
 from app.services.agent_metrics import agent_metrics
 from app.services.agent_registry import DOMAINS, route_domains
-from app.services.llm_client import ainvoke_json, get_llm
+from app.services.answer_verification import (
+    VERIFICATION_FAILED,
+    VERIFICATION_UNAVAILABLE,
+    VERIFY_SYSTEM_PROMPT,
+    AnswerReview,
+    VerificationResult,
+    build_verification_prompt,
+    evidence_record,
+)
+from app.services.llm_client import ainvoke_json, extract_json, get_llm
 from app.services.local_tools import get_local_tools
 from app.services.mcp_client import get_mcp_tools
 from app.services.user_context import reset_current_user_id, set_current_user_id
@@ -110,6 +118,7 @@ class DomainRun:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     tools_used: list[str] = field(default_factory=list)
+    evidence: list[dict] = field(default_factory=list)
 
 
 def _merge_answers(left: dict | None, right: dict | None) -> dict:
@@ -139,7 +148,9 @@ class MultiAgentState(TypedDict):
     domains: list[str] | None  # None 表示未路由；空列表表示已决定走通用回答
     # 各领域 Agent 的回答（并行写入 → 需要 reducer 合并）
     domain_answers: Annotated[dict[str, str], _merge_answers]
+    domain_evidence: Annotated[dict[str, list[dict]], _merge_answers]
     metrics: Annotated[dict[str, Any], _merge_metrics]
+    verification: dict[str, Any]
     answer: str
     error: str
 
@@ -147,8 +158,7 @@ class MultiAgentState(TypedDict):
 def should_synthesize(domains: list[str]) -> bool:
     """是否需要一个汇总节点（纯函数）。
 
-    只有一个领域时不需要——领域 Agent 的回答就是答案，
-    再汇总一次纯属多花一次 LLM 调用。
+    只有一个领域时跳过汇总，仍须走验证节点。
     """
     return len(domains) > 1
 
@@ -233,8 +243,13 @@ async def run_domain_agent(
     )
 
     for _ in range(max_steps + 1):
-        resp = await bound.ainvoke(messages)
         run.llm_calls += 1
+        try:
+            resp = await bound.ainvoke(messages)
+        except Exception as exc:  # noqa: BLE001 保留此前已获得的工具证据
+            logger.warning("领域模型执行失败 key=%s: %s", key, type(exc).__name__)
+            run.answer = f"（{domain.label}部分暂时查询失败）"
+            return run
         _add_usage(run, resp)
         messages.append(resp)
 
@@ -248,6 +263,9 @@ async def run_domain_agent(
             run.tools_used.append(call.get("name", ""))
             output = await _invoke_tool(tools, call)
             run.tool_calls += 1
+            run.evidence.append(
+                evidence_record(call.get("name", ""), call.get("args") or {}, output)
+            )
             messages.append(ToolMessage(content=output, tool_call_id=call.get("id", "")))
 
     # 用尽步数：拿最后一次的内容兜底，避免整段回答为空
@@ -293,10 +311,8 @@ async def _llm_route(question: str, history: list[dict[str, str]] | None = None)
 async def plan_domains(question: str, history: list[dict[str, str]] | None = None) -> list[str]:
     """决定这次问题要跑哪些领域（关键词优先，没命中再问 LLM）。
 
-    单独暴露出来是因为**流式入口需要提前知道领域**：
-    只有一个领域时，直接转发那个领域 Agent 的 token；
-    多个领域时要等汇总节点的 token，否则用户会先后看到
-    "各领域的分段回答"和"汇总后的完整回答"，等于把内容看了两遍。
+    流式入口提前确定领域与意图；有领域时必须等核验完成，
+    无领域的通用回答仍可转发模型 token。
     """
     domains = route_domains(question)
     if not domains:
@@ -352,7 +368,7 @@ def _route_from_supervisor(state: MultiAgentState) -> list[str]:
 
 def _after_domain(state: MultiAgentState) -> str:
     """领域节点执行完之后的路由：多域才需要汇总。"""
-    return "synthesize" if should_synthesize(state.get("domains") or []) else END
+    return "synthesize" if should_synthesize(state.get("domains") or []) else "verify"
 
 
 def _usage_of(message: Any, llm_calls: int = 1) -> dict[str, Any]:
@@ -384,10 +400,12 @@ def _make_domain_node(key: str):
             logger.exception("领域 Agent 执行失败 key=%s: %s", key, exc)
             return {
                 "domain_answers": {key: f"（{DOMAINS[key].label}部分暂时查询失败）"},
+                "domain_evidence": {key: []},
                 "metrics": {"llm_calls": 0, "tool_calls": 0, "tools_used": []},
             }
         return {
             "domain_answers": {key: run.answer},
+            "domain_evidence": {key: run.evidence},
             "metrics": {
                 "llm_calls": run.llm_calls,
                 "tool_calls": run.tool_calls,
@@ -431,8 +449,7 @@ def build_merge_prompt(question: str, answers: dict[str, str]) -> str:
 def fallback_merge(answers: dict[str, str]) -> str:
     """汇总 LLM 失败时的兜底：按领域顺序直接拼接原文。
 
-    **宁可读起来生硬，也不能丢信息或整体失败**——
-    多域回答里每一块都是真实查到的结果，拼起来仍然可用。
+    拼接结果只是待验证草稿，不能视为已经可靠的最终答案。
     """
     parts = [answers[key] for key in DOMAINS if answers.get(key)]
     return "\n\n".join(parts) if parts else "抱歉，暂时没能查到相关信息。"
@@ -461,18 +478,62 @@ async def _synthesize_node(state: MultiAgentState) -> dict:
         return {"answer": fallback_merge(answers), "metrics": {"llm_calls": 1}}
 
 
+async def _verify_node(state: MultiAgentState) -> dict:
+    """核对草稿；最多一次修正和一次复查，不通过或故障都不发布原稿。"""
+    draft = state.get("answer") or fallback_merge(state.get("domain_answers") or {})
+    metrics: dict[str, Any] = {}
+    issues: list[str] = []
+    for check in range(1, 3):
+        try:
+            resp = await get_llm().ainvoke(
+                [
+                    SystemMessage(content=VERIFY_SYSTEM_PROMPT),
+                    HumanMessage(
+                        content=build_verification_prompt(
+                            state if check == 1 else {**state, "domain_answers": {}}, draft
+                        )
+                    ),
+                ]
+            )
+            metrics = _merge_metrics(metrics, _usage_of(resp))
+            content = resp.content if isinstance(resp.content, str) else str(resp.content)
+            review = AnswerReview.model_validate(extract_json(content))
+            if review.passed and draft.strip() and len(draft) <= 12000:
+                return {
+                    "answer": draft,
+                    "verification": VerificationResult(
+                        status="passed" if check == 1 else "corrected", checks=check, issues=issues
+                    ).model_dump(),
+                    "metrics": metrics,
+                }
+            issues = list(dict.fromkeys([*issues, *review.issues]))
+            draft = review.revised_answer.strip()
+        except Exception as exc:  # noqa: BLE001 核验失败不能泄漏未验证草稿
+            logger.warning("回答核验失败: %s", type(exc).__name__)
+            # 模型调用异常仍计为一次尝试；解析异常已记录该响应的用量。
+            if int(metrics.get("llm_calls", 0)) < check:
+                metrics = _merge_metrics(metrics, {"llm_calls": 1})
+            return {
+                "answer": VERIFICATION_UNAVAILABLE,
+                "verification": VerificationResult(
+                    status="unverified", checks=check, issues=issues
+                ).model_dump(),
+                "metrics": metrics,
+            }
+    return {
+        "answer": VERIFICATION_FAILED,
+        "verification": VerificationResult(status="failed", checks=2, issues=issues).model_dump(),
+        "metrics": metrics,
+    }
+
+
 def stream_source_node(domains: list[str]) -> str:
     """流式时只转发哪个节点的 token（纯函数）。
 
-    - 1 个领域 → 该领域节点（它的输出就是最终答案）
-    - ≥2 个领域 → 汇总节点（转发领域节点会让用户把内容看两遍）
+    - ≥1 个领域 → 验证节点完成后发送最终答案，不转发草稿或验证 JSON
     - 0 个领域 → 通用回答节点
     """
-    if len(domains) == 1:
-        return f"domain_{domains[0]}"
-    if len(domains) > 1:
-        return "synthesize"
-    return "general"
+    return "verify" if domains else "general"
 
 
 async def chat_multi_stream(
@@ -485,9 +546,9 @@ async def chat_multi_stream(
 ):
     """多智能体流式入口（SSE）。
 
-    与单 Agent 的流式实现同一个约束：**只转发最终产出节点的 token**，
-    否则会把中间过程（领域分段的草稿）也推给用户，
-    用户会先后看到"分段回答"和"汇总回答"，等于内容看了两遍。
+    有领域时只发送 verify 节点完成后的最终文本（一次 token 事件）；
+    不向客户端发布领域草稿、汇总草稿、验证 JSON 或未通过的修正稿。
+    通用闲聊继续逐 token 返回。
 
     token 用量按全部节点的 chunk 累加，统计到的仍是这次请求的真实成本。
     domains 可由调用方预先算好传入（上层已算过就别再算一遍——
@@ -502,6 +563,8 @@ async def chat_multi_stream(
         "memory_context": memory_context,
         "domains": domains,
         "domain_answers": {},
+        "domain_evidence": {},
+        "verification": {},
         "metrics": {},
         "answer": "",
         "error": "",
@@ -512,7 +575,14 @@ async def chat_multi_stream(
 
     try:
         ag = await _get_graph()
-        async for chunk in ag.astream(initial, stream_mode="messages"):
+        emitted = False
+        async for mode, chunk in ag.astream(initial, stream_mode=["messages", "updates"]):
+            if mode == "updates":
+                final = chunk.get(source) or {}
+                if final.get("answer") and (source == "verify" or not emitted):
+                    yield {"type": "token", "content": final["answer"]}
+                    emitted = True
+                continue
             msg_chunk = chunk[0] if isinstance(chunk, tuple) else chunk
             meta = chunk[1] if isinstance(chunk, tuple) else {}
 
@@ -520,12 +590,13 @@ async def chat_multi_stream(
             prompt_tokens += int(usage.get("input_tokens", 0) or 0)
             completion_tokens += int(usage.get("output_tokens", 0) or 0)
 
-            if meta.get("langgraph_node") != source:
+            if source == "verify" or meta.get("langgraph_node") != source:
                 continue
             if isinstance(msg_chunk, AIMessageChunk):
                 piece = msg_chunk.content
                 if isinstance(piece, str) and piece:
                     yield {"type": "token", "content": piece}
+                    emitted = True
     except Exception as exc:
         logger.exception("多智能体流式对话异常: %s", exc)
         yield {"type": "token", "content": "抱歉，AI 服务暂时不可用，请稍后重试。"}
@@ -563,6 +634,7 @@ async def _build_graph():
     graph.add_node("supervisor", _supervisor_node)
     graph.add_node("general", _general_node)
     graph.add_node("synthesize", _synthesize_node)
+    graph.add_node("verify", _verify_node)
     domain_nodes = [f"domain_{key}" for key in DOMAINS]
     for key in DOMAINS:
         graph.add_node(f"domain_{key}", _make_domain_node(key))
@@ -571,9 +643,10 @@ async def _build_graph():
     graph.add_conditional_edges("supervisor", _route_from_supervisor, [*domain_nodes, "general"])
     for name in domain_nodes:
         # 每个领域节点都连到 synthesize：多域时它们全部结束后才执行汇总
-        graph.add_conditional_edges(name, _after_domain, ["synthesize", END])
+        graph.add_conditional_edges(name, _after_domain, ["synthesize", "verify"])
     graph.add_edge("general", END)
-    graph.add_edge("synthesize", END)
+    graph.add_edge("synthesize", "verify")
+    graph.add_edge("verify", END)
 
     return graph.compile()
 
@@ -616,7 +689,7 @@ async def chat_multi(
     history: list[dict[str, str]] | None = None,
     memory_context: str = "",
 ) -> dict[str, Any]:
-    """多智能体对话入口。返回 {answer, domains, metrics}。
+    """多智能体对话入口。返回 {answer, domains, metrics, verification}。
 
     失败时返回友好提示而不是抛异常——与单 Agent 的兜底立场一致：
     对话接口永远不该 500。
@@ -627,6 +700,8 @@ async def chat_multi(
         "memory_context": memory_context,
         "domains": None,
         "domain_answers": {},
+        "domain_evidence": {},
+        "verification": {},
         "metrics": {},
         "answer": "",
         "error": "",
@@ -659,7 +734,12 @@ async def chat_multi(
             stat["tool_calls"],
             stat["duration_ms"],
         )
-        return {"answer": answer, "domains": domains, "metrics": stat}
+        return {
+            "answer": answer,
+            "domains": domains,
+            "metrics": stat,
+            "verification": result.get("verification") or {},
+        }
     except Exception as exc:
         logger.exception("多智能体执行失败: %s", exc)
         agent_metrics.observe(

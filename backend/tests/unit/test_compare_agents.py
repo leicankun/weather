@@ -19,6 +19,14 @@ class ToolModel(GenericFakeChatModel):
         return self
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        if "独立的回答验证员" in messages[0].content:
+            return ChatResult(
+                generations=[
+                    ChatGeneration(
+                        message=AIMessage(content='{"passed":true,"issues":[],"revised_answer":""}')
+                    )
+                ]
+            )
         self.calls.append(messages)
         response = (
             AIMessage(content="天气工具结果已收到")
@@ -68,7 +76,7 @@ async def test_比较真实领域执行并记录工具结果且共享相同上�
         memory_context="常住海珠区",
     )
     assert result["answer"] == "天气工具结果已收到"
-    assert result["llm"] == 2 and result["tools"] == 1
+    assert result["llm"] == (3 if mode == "multi" else 2) and result["tools"] == 1
     assert result["tool_trace"][0]["name"] == "get_weather"
     assert result["tool_trace"][0]["output"] == "测试气温23度"
     assert "常住海珠区" in model.calls[0][0].content

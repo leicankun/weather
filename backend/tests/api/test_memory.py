@@ -32,6 +32,14 @@ class MemoryModel(GenericFakeChatModel):
         return self
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        if "独立的回答验证员" in messages[0].content:
+            return ChatResult(
+                generations=[
+                    ChatGeneration(
+                        message=AIMessage(content='{"passed":true,"issues":[],"revised_answer":""}')
+                    )
+                ]
+            )
         self.calls.append(list(messages))
         system = messages[0].content
         answer = "other" if "意图识别模块" in system else system
