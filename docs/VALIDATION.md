@@ -29,7 +29,7 @@
 - Chrome 桌面 1440px 和手机 390px 页面已截图检查；页面无运行时异常，手机页面无横向溢出，导航可折叠。
 - 天气时间统一显示北京时间，支持 UTC 带时区与本地无时区返回格式。
 
-## 尚未验证的部分
+## 2026-10-09 尚未验证的部分
 
 - 本机没有可用的 Docker / PostgreSQL / Redis 服务，数据库迁移和 201 项依赖数据库的测试尚未执行。`--no-db` 显式跳过数据库相关用例，默认 pytest 行为仍要求真实测试库。
 - `/health` 因 PostgreSQL 和 Redis 不可用而返回 503；不能据此宣称全系统健康。
@@ -39,3 +39,19 @@
 - 两端构建存在大于 500KB 的产物提示，主要涉及 UI / 图表依赖；构建通过，后续可按需加载优化。
 
 启动依赖和配置步骤见 [LOCAL_SETUP.md](LOCAL_SETUP.md)。源代码中的上游署名与原仓库历史保留，未向上游推送改动。
+
+## 2026-10-10：修复业务表迁移遗漏
+
+本次环境已有 Docker PostgreSQL 17，包含 vector、PostGIS、TimescaleDB 扩展。开发库原处于 `0013_user_preferences`，但缺少 `user_knowledge`、`chat_messages`、`itineraries`、`clean_tasks`，导致个人知识库列表接口报表不存在。新增 `0014_missing_business_tables` 迁移，并提高 Alembic 最低版本至 1.13.3（支持创建表时的 `if_not_exists` 参数）。
+
+| 检查 | 结果 |
+| --- | --- |
+| `python -m ruff check .` | 通过 |
+| `python -m ruff format --check .` | 195 个文件通过 |
+| 对新增迁移单独执行 Ruff 检查及格式检查 | 通过；迁移目录不在默认检查范围内 |
+| `python -m pytest tests/api/test_migrations.py -o addopts= -q` | 2 项通过：空库迁移及知识库增删查、检索、用户隔离；旧库升级保留数据 |
+| `python -m pytest` | 699 项通过，2 项失败，无跳过；执行了数据库集成测试 |
+| `./scripts/dev.ps1 migrate` | 开发库成功升级到 `0014_missing_business_tables`，所有 ORM 模型对应表均存在 |
+| 真实后端 `GET http://127.0.0.1:8000/api/v1/my-knowledge` | 使用本地用户 1 的令牌调用，HTTP 200、`code=0`、`total=0` |
+
+完整套件的两项失败均位于 `tests/api/test_notifications.py`：`TestVapidKey::test_返回公钥` 假定已配置 VAPID 公钥，但本地配置为空；`TestPrefs::test_默认全开` 精确比对旧的四字段响应，实际接口已包含 `risk_enabled`。本次未修改通知接口或这些测试；不能把本次完整套件表述为全部通过。前端未改动，未重复运行前端检查；外部模型调用未在本次验证范围内。

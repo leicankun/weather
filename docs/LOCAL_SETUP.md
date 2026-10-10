@@ -20,6 +20,8 @@ docker compose up -d --build postgres redis
 
 setup 会创建 backend/.venv、安装依赖，首次生成 backend/.env 和随机 JWT 密钥；已存在的配置不会被覆盖。需要 PDF/Word/Excel、离线 OCR 或本地语音识别时使用 `setup.ps1 -Media`。没有配置模型密钥时，AI 对话和行程生成不能正常调用模型，天气首页仍可通过 Open-Meteo 获取公开天气。
 
+更新代码后也要执行 `./scripts/dev.ps1 migrate`。若出现 `relation "user_knowledge" does not exist`，在项目根目录执行此命令；`0014_missing_business_tables` 会补齐个人知识库、聊天记录、行程和清洗任务表，并保留已存在的表和数据。无需删除数据库或手动运行 `create_all`。
+
 分别在三个终端运行：
 
 ```powershell
