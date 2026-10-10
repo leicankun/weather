@@ -13,3 +13,5 @@
 无数据库的本地验证使用 `python -m pytest --no-db -o addopts= -q`。该模式显式跳过依赖 db/client 等集成夹具的用例，并禁止初始化/清理数据库。默认模式继续运行完整套件，CI 仍使用真实 PostgreSQL。
 
 每次验证的实际通过数、跳过数、环境限制记录在 VALIDATION.md。不能把 no-db 或前端 mock 测试表述成全栈联调成功。
+
+多智能体多轮对话回归：`python -m pytest tests/api/test_chat_history.py tests/unit/test_multi_agent.py tests/unit/test_chat_history_service.py -o addopts= -q`。API 用例使用真实 PostgreSQL 和完整 LangGraph 图，模型与外部工具使用替身，覆盖普通及 SSE 两轮对话、领域与汇总节点接收历史、通用回答、最近 10 条限制、用户/会话隔离和匿名请求。单元用例另覆盖省略问题的上下文路由及工具循环不改写共享历史。

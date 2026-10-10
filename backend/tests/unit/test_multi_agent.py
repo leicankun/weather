@@ -90,6 +90,7 @@ class FakeLLM:
         return None
 
     async def ainvoke(self, messages: list) -> AIMessage:
+        self.capture.setdefault("messages", []).append(list(messages))
         system = _content_of(messages[0]) if messages else ""
 
         # 脚本优先：测试"工具循环"时要能精确控制每一轮返回什么
@@ -326,6 +327,75 @@ class TestChatMultiGraph:
 
         assert result["domains"] == []
         assert "暂时不可用" in result["answer"]
+
+
+class TestMultiTurnHistory:
+    @pytest.fixture(autouse=True)
+    def _fresh_graph(self):
+        multi_agent.reset_cache()
+        yield
+        multi_agent.reset_cache()
+
+    @pytest.mark.parametrize(
+        ("question", "expected_calls"),
+        [("那怎么走", 1), ("那穿什么、怎么走", 4), ("谢谢你", 1)],
+    )
+    async def test_领域通用和汇总节点保留历史角色(self, monkeypatch, question, expected_calls):
+        history = [
+            {"role": "user", "content": "周末去广州塔，预算800元"},
+            {"role": "assistant", "content": "已记住广州塔和预算"},
+        ]
+        capture = {}
+        _patch_llm(monkeypatch, [], capture=capture)
+        _patch_tools(monkeypatch)
+
+        async def route(*args, **kwargs):
+            return multi_agent.DomainChoice(domains=[])
+
+        monkeypatch.setattr(multi_agent, "ainvoke_json", route)
+        result = await multi_agent.chat_multi(question, history=history)
+
+        assert result["answer"]
+        assert len(capture["messages"]) == expected_calls
+        for messages in capture["messages"]:
+            assert [message.type for message in messages] == ["system", "human", "ai", "human"]
+            assert [message.content for message in messages[1:3]] == [
+                item["content"] for item in history
+            ]
+            assert question in messages[-1].content
+
+    async def test_省略问题路由读取前文而不拼接关键词(self, monkeypatch):
+        history = [
+            {"role": "user", "content": "广州塔的路线和明天天气"},
+            {"role": "assistant", "content": "已给出路线，明天晴"},
+        ]
+        prompts = []
+
+        async def route(prompt, schema, **kwargs):
+            prompts.append(prompt)
+            return multi_agent.DomainChoice(domains=["weather"])
+
+        monkeypatch.setattr(multi_agent, "ainvoke_json", route)
+        assert await multi_agent.plan_domains("那后天呢", history=history) == ["weather"]
+        assert len(prompts) == 1
+        assert "广州塔" in prompts[0] and "明天晴" in prompts[0]
+        assert prompts[0].endswith("本次问题：那后天呢")
+
+    async def test_领域工具循环不会改写共享历史(self, monkeypatch):
+        history = [{"role": "user", "content": "我要去广州塔"}]
+        capture = {}
+        script = [
+            AIMessage(content="", tool_calls=[{"name": "get_weather", "args": {}, "id": "h1"}]),
+            AIMessage(content="晴天"),
+        ]
+        _patch_llm(monkeypatch, [], script=script, capture=capture)
+        await multi_agent.run_domain_agent(
+            "weather", "那天气呢", [FakeTool("get_weather")], history=history
+        )
+        assert len(capture["messages"]) == 2
+        assert capture["messages"][1][1].content == "我要去广州塔"
+        assert capture["messages"][1][-1].type == "tool"
+        assert history == [{"role": "user", "content": "我要去广州塔"}]
 
 
 class TestPureHelpers:

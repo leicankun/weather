@@ -49,6 +49,8 @@ setup 会创建 backend/.venv、安装依赖，首次生成 backend/.env 和随�
 
 真实密钥只写在 backend/.env，不能写入前端。语音默认关闭；按需安装 requirements-media.txt 后再配置 ASR_PROVIDER。通知邮箱、Web Push 需要另外配置 SMTP/VAPID，通知中心会显示通道是否就绪。
 
+使用多智能体多轮文本对话时，设置 `AGENT_MODE=multi` 并重启后端。登录后在同一个会话中继续提问；后端自动保存每轮提问和最终回答，并读取最近 10 条历史消息。客户端调用 `/api/v1/chat` 或 `/api/v1/chat/stream` 时，需要持续传入相同的 `conversation_id`，普通接口会返回该 ID；流式客户端应自行生成并复用。新会话和不同用户的历史互不共享，匿名对话不持久化；目前未做历史摘要。
+
 ## 全容器运行
 
 先运行 setup 或按 backend/.env.example 创建 backend/.env，然后：

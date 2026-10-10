@@ -382,7 +382,7 @@ async def chat(
     single 走原来的单 Agent ReAct。intent 字段仍按旧词表返回，避免破坏前端。
     """
     if use_multi_agent():
-        result = await multi_agent.chat_multi(user_input, user_id)
+        result = await multi_agent.chat_multi(user_input, user_id, history=history)
         return {
             "intent": multi_agent.to_legacy_intent(list(result.get("domains") or [])),
             "answer": result.get("answer", ""),
@@ -415,9 +415,11 @@ async def chat_stream(
     既用于推意图、也传给多智能体避免重复路由。
     """
     if use_multi_agent():
-        domains = await multi_agent.plan_domains(user_input)
+        domains = await multi_agent.plan_domains(user_input, history=history)
         yield {"type": "intent", "intent": multi_agent.to_legacy_intent(domains)}
-        async for event in multi_agent.chat_multi_stream(user_input, user_id, domains):
+        async for event in multi_agent.chat_multi_stream(
+            user_input, user_id, domains, history=history
+        ):
             yield event
         return
 

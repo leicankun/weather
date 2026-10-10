@@ -32,7 +32,14 @@ import time
 from dataclasses import dataclass, field
 from typing import Annotated, Any, TypedDict
 
-from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
@@ -66,6 +73,8 @@ ROUTE_SYSTEM_PROMPT = (
     "knowledge（景点美食攻略与资讯）。"
     '只输出 JSON，形如 {"domains": ["weather", "outfit"]}；'
     "如果问题与出行完全无关（闲聊、自我介绍等），返回空数组。"
+    "若提供历史对话，请用它理解本次问题中的省略和指代；只路由本次问题，"
+    "不要把历史中已经回答过的其他问题也分派出去。"
 )
 
 SYNTHESIZE_SYSTEM_PROMPT = (
@@ -125,7 +134,8 @@ class MultiAgentState(TypedDict):
     """多智能体图的状态。"""
 
     question: str
-    domains: list[str]
+    history: list[dict[str, str]]
+    domains: list[str] | None  # None 表示未路由；空列表表示已决定走通用回答
     # 各领域 Agent 的回答（并行写入 → 需要 reducer 合并）
     domain_answers: Annotated[dict[str, str], _merge_answers]
     metrics: Annotated[dict[str, Any], _merge_metrics]
@@ -178,7 +188,29 @@ async def _invoke_tool(tools: list, call: dict) -> str:
         return f"工具 {name} 执行失败：{exc}"
 
 
-async def run_domain_agent(key: str, question: str, tools: list, max_steps: int = 3) -> DomainRun:
+def _messages_with_history(
+    system: str, question: str, history: list[dict[str, str]] | None = None
+) -> list[BaseMessage]:
+    """按单智能体的方式拼接角色消息，每个节点独立持有消息列表。"""
+    messages: list[BaseMessage] = [SystemMessage(content=system)]
+    for message in history or []:
+        content = message.get("content", "")
+        if message.get("role") == "user":
+            messages.append(HumanMessage(content=content))
+        elif message.get("role") == "assistant":
+            messages.append(AIMessage(content=content))
+    messages.append(HumanMessage(content=question))
+    return messages
+
+
+async def run_domain_agent(
+    key: str,
+    question: str,
+    tools: list,
+    max_steps: int = 3,
+    *,
+    history: list[dict[str, str]] | None = None,
+) -> DomainRun:
     """跑一个领域 Agent 的 ReAct 循环（工具 → 再推理），返回结果与开销。
 
     max_steps 是**硬上限**：模型偶尔会反复调用同一个工具，
@@ -189,10 +221,7 @@ async def run_domain_agent(key: str, question: str, tools: list, max_steps: int 
     llm = get_llm()
     bound = llm.bind_tools(tools) if tools else llm
 
-    messages: list = [
-        SystemMessage(content=domain.prompt + SHARED_RULES),
-        HumanMessage(content=question),
-    ]
+    messages = _messages_with_history(domain.prompt + SHARED_RULES, question, history)
 
     for _ in range(max_steps + 1):
         resp = await bound.ainvoke(messages)
@@ -221,14 +250,23 @@ async def run_domain_agent(key: str, question: str, tools: list, max_steps: int 
     return run
 
 
-async def _llm_route(question: str) -> list[str]:
+async def _llm_route(question: str, history: list[dict[str, str]] | None = None) -> list[str]:
     """关键词没命中时，交给 LLM 判断需要哪些领域（失败返回空）。
 
     返回值**必须过滤**：模型可能编出不存在的领域名，
     直接拿去查 DOMAINS 会 KeyError。
     """
+    prompt = question
+    if history:
+        messages = _messages_with_history("", question, history)[1:-1]
+        lines = [
+            f"{'用户' if isinstance(message, HumanMessage) else '助手'}：{message.content}"
+            for message in messages
+        ]
+        body = "\n".join(lines)
+        prompt = f"历史对话（仅供理解本次问题）：\n{body}\n\n本次问题：{question}"
     try:
-        choice = await ainvoke_json(question, DomainChoice, system=ROUTE_SYSTEM_PROMPT)
+        choice = await ainvoke_json(prompt, DomainChoice, system=ROUTE_SYSTEM_PROMPT)
         picked = [key for key in choice.domains if key in DOMAINS]
     except Exception as exc:  # noqa: BLE001 路由失败退化为通用回答，不影响可用性
         logger.warning("LLM 领域路由失败，退化为通用回答: %s", exc)
@@ -243,7 +281,7 @@ async def _llm_route(question: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-async def plan_domains(question: str) -> list[str]:
+async def plan_domains(question: str, history: list[dict[str, str]] | None = None) -> list[str]:
     """决定这次问题要跑哪些领域（关键词优先，没命中再问 LLM）。
 
     单独暴露出来是因为**流式入口需要提前知道领域**：
@@ -253,7 +291,7 @@ async def plan_domains(question: str) -> list[str]:
     """
     domains = route_domains(question)
     if not domains:
-        domains = await _llm_route(question)
+        domains = await _llm_route(question, history)
     return domains
 
 
@@ -263,9 +301,9 @@ async def _supervisor_node(state: MultiAgentState) -> dict:
     若调用方已算好领域（流式路径为了决定转发哪个节点会先算一次），
     直接用现成结果，避免重复一次 LLM 路由调用。
     """
-    if state.get("domains"):
+    if state.get("domains") is not None:
         return {"domains": state["domains"]}
-    return {"domains": await plan_domains(state["question"])}
+    return {"domains": await plan_domains(state["question"], state.get("history"))}
 
 
 # 领域 → 旧意图标签（前端按旧词表展示 intent，映射回去以免破坏兼容）
@@ -326,7 +364,9 @@ def _make_domain_node(key: str):
     async def _node(state: MultiAgentState) -> dict:
         tools = (await load_domain_tools()).get(key, [])
         try:
-            run = await run_domain_agent(key, state["question"], tools)
+            run = await run_domain_agent(
+                key, state["question"], tools, history=state.get("history")
+            )
         except Exception as exc:
             logger.exception("领域 Agent 执行失败 key=%s: %s", key, exc)
             return {
@@ -350,7 +390,9 @@ def _make_domain_node(key: str):
 async def _general_node(state: MultiAgentState) -> dict:
     """通用回答：不绑工具（闲聊类问题不需要工具，省 token 也省延迟）。"""
     llm = get_llm()
-    resp = await llm.ainvoke([("system", GENERAL_SYSTEM_PROMPT), ("human", state["question"])])
+    resp = await llm.ainvoke(
+        _messages_with_history(GENERAL_SYSTEM_PROMPT, state["question"], state.get("history"))
+    )
     content = resp.content if isinstance(resp.content, str) else str(resp.content)
     return {"answer": content.strip(), "metrics": _usage_of(resp)}
 
@@ -384,10 +426,11 @@ async def _synthesize_node(state: MultiAgentState) -> dict:
     llm = get_llm()
     try:
         resp = await llm.ainvoke(
-            [
-                ("system", SYNTHESIZE_SYSTEM_PROMPT),
-                ("human", build_merge_prompt(state["question"], answers)),
-            ]
+            _messages_with_history(
+                SYNTHESIZE_SYSTEM_PROMPT,
+                build_merge_prompt(state["question"], answers),
+                state.get("history"),
+            )
         )
         content = resp.content if isinstance(resp.content, str) else str(resp.content)
         answer = content.strip()
@@ -414,7 +457,11 @@ def stream_source_node(domains: list[str]) -> str:
 
 
 async def chat_multi_stream(
-    question: str, user_id: int | None = None, domains: list[str] | None = None
+    question: str,
+    user_id: int | None = None,
+    domains: list[str] | None = None,
+    *,
+    history: list[dict[str, str]] | None = None,
 ):
     """多智能体流式入口（SSE）。
 
@@ -426,11 +473,12 @@ async def chat_multi_stream(
     domains 可由调用方预先算好传入（上层已算过就别再算一遍——
     LLM 兜底路由那一次是有成本的）。
     """
-    domains = domains if domains is not None else await plan_domains(question)
+    domains = domains if domains is not None else await plan_domains(question, history)
     source = stream_source_node(domains)
 
     initial: MultiAgentState = {
         "question": question,
+        "history": history or [],
         "domains": domains,
         "domain_answers": {},
         "metrics": {},
@@ -540,7 +588,12 @@ def summarize_metrics(
     }
 
 
-async def chat_multi(question: str, user_id: int | None = None) -> dict[str, Any]:
+async def chat_multi(
+    question: str,
+    user_id: int | None = None,
+    *,
+    history: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
     """多智能体对话入口。返回 {answer, domains, metrics}。
 
     失败时返回友好提示而不是抛异常——与单 Agent 的兜底立场一致：
@@ -548,7 +601,8 @@ async def chat_multi(question: str, user_id: int | None = None) -> dict[str, Any
     """
     initial: MultiAgentState = {
         "question": question,
-        "domains": [],
+        "history": history or [],
+        "domains": None,
         "domain_answers": {},
         "metrics": {},
         "answer": "",
