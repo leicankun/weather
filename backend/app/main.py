@@ -17,6 +17,7 @@ from app.routers import (
     home,
     itinerary,
     knowledge,
+    memory,
     news,
     notes,
     notifications,
@@ -48,6 +49,7 @@ app.include_router(knowledge.router)
 app.include_router(user_knowledge.router)
 app.include_router(itinerary.router)
 app.include_router(chat.router)
+app.include_router(memory.router)
 app.include_router(recommend.router)
 app.include_router(places.router)
 app.include_router(notes.router)

@@ -1,0 +1,231 @@
+{
+  "at": "2026-10-10T08:12:46.711434+00:00",
+  "cases": [
+    {
+      "mode": "single",
+      "path": "/api/v1/chat",
+      "question": "我长期住在广州天河区，我平时不吃辣，出门喜欢坐地铁。",
+      "answer": "你好！很高兴认识你 😊 我记下你的几个关键偏好了：\n\n- **常住地**：广州天河区（后续出行默认从这里出发）\n- **饮食**：不吃辣（推荐美食/餐厅时会帮你避开川湘辣口）\n- **出行**：偏好地铁（规划路线时会优先给地铁方案）\n\n以后你可以直接问我，比如：\n- \"明天去广州塔穿什么、怎么坐地铁去？\"\n- \"周末想在天河附近逛逛，帮我排个行程\"\n- \"后天有什么安排，要注意什么？\"\n\n需要我现在帮你做点什么吗？比如查一下天河区今天的天气，或者规划一条地铁出行路线？",
+      "seconds": 6.76
+    },
+    {
+      "mode": "single",
+      "path": "/api/v1/chat",
+      "question": "你了解我的居住地和饮食偏好吗？",
+      "answer": "你长期住在广州天河区，平时不吃辣，出门喜欢坐地铁。需要我据此推荐天河附近不辣的美食或地铁出行路线吗？",
+      "seconds": 3.24
+    },
+    {
+      "mode": "single",
+      "path": "/api/v1/chat",
+      "question": "上次游玩活动的集合点是星河书店，活动暗号是蓝鲸7429，这只是那次活动的信息。",
+      "answer": "收到，星河书店集合、暗号蓝鲸7429——这仅是上次活动的信息，我不会当作本次安排。\n\n需要我帮你查广州天气或规划地铁出行吗？",
+      "seconds": 8.33
+    },
+    {
+      "mode": "single",
+      "path": "/api/v1/chat",
+      "question": "上次游玩活动的集合点和暗号是什么？",
+      "answer": "上次活动集合点是**星河书店**，暗号**蓝鲸7429**（2026-10-10记录，仅限那次活动）。需要我帮你查天气或规划地铁出行吗？",
+      "seconds": 13.56
+    },
+    {
+      "mode": "single",
+      "path": "/api/v1/chat",
+      "question": "更正一下，我长期住在海珠区，现在喜欢微辣，日常还是坐地铁。",
+      "answer": "收到，帮你更新一下记忆：\n\n- **居住地**：海珠区（原记录为天河区）\n- **口味**：微辣（原记录为不吃辣）\n- **出行方式**：地铁（不变）\n\n以后给你做天气、穿搭、路线和行程建议时，我会按这三点来。有需要随时喊我～",
+      "seconds": 4.65
+    },
+    {
+      "mode": "single",
+      "path": "/api/v1/chat",
+      "question": "我现在住哪，喜欢吃什么口味？",
+      "answer": "你长期住在广州海珠区，口味喜欢微辣。",
+      "seconds": 3.26
+    },
+    {
+      "mode": "multi",
+      "path": "/api/v1/chat/stream",
+      "question": "记得我现在住哪、喜欢什么口味吗？",
+      "answer": "你长期住在广州海珠区，口味喜欢微辣，日常出门坐地铁。（据 2026-10-10 的记录）",
+      "seconds": 10.21
+    },
+    {
+      "mode": "multi",
+      "path": "/api/v1/chat/stream",
+      "question": "之前那次活动的集合点和暗号是什么？",
+      "answer": "上次活动集合点是**星河书店**，暗号**蓝鲸7429**（2026-10-10记录，仅限那次活动）。需要我帮你查天气或规划地铁出行吗？",
+      "seconds": 10.31
+    },
+    {
+      "mode": "multi",
+      "path": "/api/v1/chat/stream",
+      "question": "根据我的常住地和口味，给两条通用饮食建议，不需要查询餐厅。",
+      "answer": "你在海珠区、喜欢微辣，建议：\n\n1. 海珠老城区肠粉、云吞面多，早餐可清淡为主，午餐再吃微辣小炒，肠胃更舒服。\n2. 点粤菜时选“微辣”或辣椒酱另上，既合口味又不盖住鲜味。\n\n需要具体推荐时再告诉我。",
+      "seconds": 3.82
+    },
+    {
+      "mode": "multi",
+      "path": "/api/v1/chat/stream",
+      "question": "假设我住在白云区而且对花生过敏，你先不用给建议，这只是举例。",
+      "answer": "好的，记下了：白云区、花生过敏——这次只是举例，不用给建议。有需要随时说。",
+      "seconds": 3.65
+    },
+    {
+      "mode": "multi",
+      "path": "/api/v1/chat/stream",
+      "question": "我之前活动的暗号是什么？",
+      "answer": "抱歉，我没有存储你之前的活动暗号信息哦～每次对话我都是\"重新开始\"的，无法查看历史记录。建议你翻翻之前的聊天记录或活动通知，应该能找到～有其他出行问题随时问我！",
+      "seconds": 4.23
+    },
+    {
+      "mode": "multi",
+      "path": "/api/v1/chat/stream",
+      "question": "你记得我的常住地和饮食偏好吗？",
+      "answer": "抱歉，我没有记忆功能，无法记住你的常住地和饮食偏好哦～每次对话都是全新的开始。你可以直接告诉我，我会根据你提供的信息帮你推荐合适的出行建议！",
+      "seconds": 5.64
+    },
+    {
+      "mode": "multi",
+      "path": "/api/v1/chat/stream",
+      "question": "我之前活动的暗号是什么？",
+      "answer": "目前没找到相关记录。",
+      "seconds": 7.94,
+      "follow_up": "empty_memory_capability_fix"
+    },
+    {
+      "mode": "multi",
+      "path": "/api/v1/chat/stream",
+      "question": "你记得我的常住地和饮食偏好吗？",
+      "answer": "目前没找到相关记录。你可以告诉我常住地和饮食偏好，我会记住，方便以后推荐天气出行和本地美食。",
+      "seconds": 4.53,
+      "follow_up": "empty_memory_capability_fix"
+    }
+  ],
+  "checks": {
+    "cross_conversation_cards": true,
+    "beyond_ten_messages_rag": true,
+    "dense_bm25_rrf_rerank": true,
+    "correction": true,
+    "multi_sse": true,
+    "hypothesis_ignored": true,
+    "user_isolation": true,
+    "clear_prevents_backfill": true,
+    "empty_memory_capability_fix": true
+  },
+  "first_cards": [
+    {
+      "id": 1,
+      "kind": "fact",
+      "key": "residence",
+      "data": {
+        "value": "长期住在广州天河区",
+        "evidence": "我长期住在广州天河区"
+      },
+      "source_message_id": 9,
+      "updated_at": "2026-10-10T08:12:53.025330+00:00"
+    },
+    {
+      "id": 2,
+      "kind": "preference",
+      "key": "diet_no_spicy",
+      "data": {
+        "value": "不吃辣",
+        "evidence": "我平时不吃辣"
+      },
+      "source_message_id": 9,
+      "updated_at": "2026-10-10T08:12:53.029297+00:00"
+    },
+    {
+      "id": 3,
+      "kind": "preference",
+      "key": "transport_preference",
+      "data": {
+        "value": "出门喜欢坐地铁",
+        "evidence": "出门喜欢坐地铁"
+      },
+      "source_message_id": 9,
+      "updated_at": "2026-10-10T08:12:53.031119+00:00"
+    }
+  ],
+  "retrieval": [
+    {
+      "id": 5,
+      "title": "2026-10-10T08:13:03.530631+00:00 | user | 消息 13",
+      "source": "chat:old-event:13",
+      "content": "2026-10-10T08:13:03.530631+00:00 | user | 消息 13\n上次游玩活动的集合点是星河书店，活动暗号是蓝鲸7429，这只是那次活动的信息。",
+      "chunk_index": 0,
+      "similarity": 0.7123,
+      "bm25_score": 8.79053,
+      "rrf_score": 0.03225806,
+      "dense_rank": 2,
+      "bm25_rank": 2,
+      "rerank_score": 0.9275598882700505,
+      "rerank_rank": 1
+    },
+    {
+      "id": 19,
+      "title": "2026-10-10T08:13:17.432309+00:00 | user | 消息 27",
+      "source": "chat:event-recall:27",
+      "content": "2026-10-10T08:13:17.432309+00:00 | user | 消息 27\n上次游玩活动的集合点和暗号是什么？",
+      "chunk_index": 0,
+      "similarity": 0.8725,
+      "bm25_score": 11.92937,
+      "rrf_score": 0.03278689,
+      "dense_rank": 1,
+      "bm25_rank": 1,
+      "rerank_score": 0.8463555910941043,
+      "rerank_rank": 2
+    },
+    {
+      "id": 20,
+      "title": "2026-10-10T08:13:17.432312+00:00 | assistant | 消息 28",
+      "source": "chat:event-recall:28",
+      "content": "2026-10-10T08:13:17.432312+00:00 | assistant | 消息 28\n上次活动集合点是**星河书店**，暗号**蓝鲸7429**（2026-10-10记录，仅限那次活动）。需要我帮你查天气或规划地铁出行吗？",
+      "chunk_index": 0,
+      "similarity": 0.6405,
+      "bm25_score": 6.056132,
+      "rrf_score": 0.03174603,
+      "dense_rank": 3,
+      "bm25_rank": 3,
+      "rerank_score": 0.38964121014066677,
+      "rerank_rank": 3
+    }
+  ],
+  "updated_cards": [
+    {
+      "id": 1,
+      "kind": "fact",
+      "key": "residence",
+      "data": {
+        "value": "长期住在广州海珠区",
+        "evidence": "我长期住在海珠区"
+      },
+      "source_message_id": 29,
+      "updated_at": "2026-10-10T08:13:30.363941+00:00"
+    },
+    {
+      "id": 2,
+      "kind": "preference",
+      "key": "diet_no_spicy",
+      "data": {
+        "value": "喜欢微辣",
+        "evidence": "现在喜欢微辣"
+      },
+      "source_message_id": 29,
+      "updated_at": "2026-10-10T08:13:30.369260+00:00"
+    },
+    {
+      "id": 3,
+      "kind": "preference",
+      "key": "transport_preference",
+      "data": {
+        "value": "日常出门坐地铁",
+        "evidence": "日常还是坐地铁"
+      },
+      "source_message_id": 29,
+      "updated_at": "2026-10-10T08:13:30.371524+00:00"
+    }
+  ],
+  "temporary_data_removed": true
+}

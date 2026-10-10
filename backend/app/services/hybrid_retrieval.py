@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.knowledge import KnowledgeChunk
+from app.models.memory import MemoryEpisode
 from app.models.user_knowledge import UserKnowledge
 from app.services.embedding_client import embedding_client
 from app.services.rerank_client import rerank_client
@@ -116,6 +117,8 @@ async def search_hybrid(
     top_k: int,
     *,
     user_id: int | None = None,
+    history: bool = False,
+    exclude_message_ids: list[int] | None = None,
 ) -> list[dict[str, Any]]:
     """公共库或指定用户私有库检索，不保存独立索引，新增/删除立即可见。"""
     query = query.strip()
@@ -123,8 +126,12 @@ async def search_hybrid(
         raise ValueError("查询文本不能为空")
     top_k = max(1, min(10, int(top_k)))
     candidate_k = max(top_k, settings.RAG_CANDIDATE_K)
-    model = KnowledgeChunk if user_id is None else UserKnowledge
+    if history and user_id is None:
+        raise ValueError("历史记忆检索必须指定用户")
+    model = MemoryEpisode if history else (KnowledgeChunk if user_id is None else UserKnowledge)
     scope = [] if user_id is None else [model.user_id == user_id]
+    if history and exclude_message_ids:
+        scope.append(model.message_id.not_in(exclude_message_ids))
     columns = (model.id, model.title, model.source, model.content, model.chunk_index)
     rows = await db.execute(select(*columns).where(*scope).order_by(model.id))
     documents = [dict(row) for row in rows.mappings()]

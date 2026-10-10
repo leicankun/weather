@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     # 出问题改一行配置就能退回旧路径，不用重新发版。
     AGENT_MODE: str = "single"
 
+    # 双层记忆：每轮注入有限的偏好/事实卡片，需要回忆时检索历史。
+    MEMORY_ENABLED: bool = True
+    MEMORY_CARD_LIMIT: int = Field(default=30, ge=1, le=100)
+    MEMORY_CARD_CHARS: int = Field(default=2500, ge=300, le=6000)
+    MEMORY_HISTORY_TOP_K: int = Field(default=3, ge=1, le=10)
+    MEMORY_HISTORY_CHARS: int = Field(default=3500, ge=500, le=10000)
+    MEMORY_TIMEOUT: float = Field(default=20.0, gt=0, le=60)
+    MEMORY_BACKFILL_BATCH: int = Field(default=30, ge=1, le=100)
+
     # ===== 多模态（对话支持图片/语音/文件）=====
     # 图片必须走视觉模型，所以单独配置：本项目的默认对话模型 deepseek-chat 是纯文本，
     # 直接塞图片会 400。默认用智谱 GLM-4V——它的 Key 本项目已用于 Embedding，开箱可用。

@@ -153,6 +153,8 @@ def _disable_external_rerank(monkeypatch):
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "RERANK_ENABLED", False)
+    # 记忆回归显式开启并替换提取/向量模型，避免已有聊天用例使用真实 Key。
+    monkeypatch.setattr(settings, "MEMORY_ENABLED", False)
 
 
 @pytest_asyncio.fixture

@@ -134,6 +134,7 @@ class MultiAgentState(TypedDict):
     """多智能体图的状态。"""
 
     question: str
+    memory_context: str
     history: list[dict[str, str]]
     domains: list[str] | None  # None 表示未路由；空列表表示已决定走通用回答
     # 各领域 Agent 的回答（并行写入 → 需要 reducer 合并）
@@ -189,10 +190,15 @@ async def _invoke_tool(tools: list, call: dict) -> str:
 
 
 def _messages_with_history(
-    system: str, question: str, history: list[dict[str, str]] | None = None
+    system: str,
+    question: str,
+    history: list[dict[str, str]] | None = None,
+    memory_context: str = "",
 ) -> list[BaseMessage]:
     """按单智能体的方式拼接角色消息，每个节点独立持有消息列表。"""
-    messages: list[BaseMessage] = [SystemMessage(content=system)]
+    messages: list[BaseMessage] = [
+        SystemMessage(content=system + ("\n" + memory_context if memory_context else ""))
+    ]
     for message in history or []:
         content = message.get("content", "")
         if message.get("role") == "user":
@@ -210,6 +216,7 @@ async def run_domain_agent(
     max_steps: int = 3,
     *,
     history: list[dict[str, str]] | None = None,
+    memory_context: str = "",
 ) -> DomainRun:
     """跑一个领域 Agent 的 ReAct 循环（工具 → 再推理），返回结果与开销。
 
@@ -221,7 +228,9 @@ async def run_domain_agent(
     llm = get_llm()
     bound = llm.bind_tools(tools) if tools else llm
 
-    messages = _messages_with_history(domain.prompt + SHARED_RULES, question, history)
+    messages = _messages_with_history(
+        domain.prompt + SHARED_RULES, question, history, memory_context
+    )
 
     for _ in range(max_steps + 1):
         resp = await bound.ainvoke(messages)
@@ -365,7 +374,11 @@ def _make_domain_node(key: str):
         tools = (await load_domain_tools()).get(key, [])
         try:
             run = await run_domain_agent(
-                key, state["question"], tools, history=state.get("history")
+                key,
+                state["question"],
+                tools,
+                history=state.get("history"),
+                memory_context=state.get("memory_context", ""),
             )
         except Exception as exc:
             logger.exception("领域 Agent 执行失败 key=%s: %s", key, exc)
@@ -391,7 +404,12 @@ async def _general_node(state: MultiAgentState) -> dict:
     """通用回答：不绑工具（闲聊类问题不需要工具，省 token 也省延迟）。"""
     llm = get_llm()
     resp = await llm.ainvoke(
-        _messages_with_history(GENERAL_SYSTEM_PROMPT, state["question"], state.get("history"))
+        _messages_with_history(
+            GENERAL_SYSTEM_PROMPT,
+            state["question"],
+            state.get("history"),
+            state.get("memory_context", ""),
+        )
     )
     content = resp.content if isinstance(resp.content, str) else str(resp.content)
     return {"answer": content.strip(), "metrics": _usage_of(resp)}
@@ -430,6 +448,7 @@ async def _synthesize_node(state: MultiAgentState) -> dict:
                 SYNTHESIZE_SYSTEM_PROMPT,
                 build_merge_prompt(state["question"], answers),
                 state.get("history"),
+                state.get("memory_context", ""),
             )
         )
         content = resp.content if isinstance(resp.content, str) else str(resp.content)
@@ -462,6 +481,7 @@ async def chat_multi_stream(
     domains: list[str] | None = None,
     *,
     history: list[dict[str, str]] | None = None,
+    memory_context: str = "",
 ):
     """多智能体流式入口（SSE）。
 
@@ -479,6 +499,7 @@ async def chat_multi_stream(
     initial: MultiAgentState = {
         "question": question,
         "history": history or [],
+        "memory_context": memory_context,
         "domains": domains,
         "domain_answers": {},
         "metrics": {},
@@ -593,6 +614,7 @@ async def chat_multi(
     user_id: int | None = None,
     *,
     history: list[dict[str, str]] | None = None,
+    memory_context: str = "",
 ) -> dict[str, Any]:
     """多智能体对话入口。返回 {answer, domains, metrics}。
 
@@ -602,6 +624,7 @@ async def chat_multi(
     initial: MultiAgentState = {
         "question": question,
         "history": history or [],
+        "memory_context": memory_context,
         "domains": None,
         "domain_answers": {},
         "metrics": {},

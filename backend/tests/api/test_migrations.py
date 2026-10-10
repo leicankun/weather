@@ -23,7 +23,15 @@ from app.services.embedding_client import embedding_client
 from tests.conftest import TEST_DB_URL
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-MISSING_TABLES = ("user_knowledge", "chat_messages", "itineraries", "clean_tasks")
+MISSING_TABLES = (
+    "user_knowledge",
+    "chat_messages",
+    "itineraries",
+    "clean_tasks",
+    "memory_cards",
+    "memory_episodes",
+    "memory_states",
+)
 
 
 async def _upgrade(url, revision="head"):
@@ -172,7 +180,8 @@ async def test_upgrade_preserves_tables_previously_created_by_orm(migration_data
     engine = create_async_engine(migration_database, poolclass=NullPool)
     try:
         async with engine.begin() as conn:
-            for name in MISSING_TABLES:
+            # 这些是 0013 时期曾由 ORM 建立的旧表；记忆表由 0016 正常创建。
+            for name in MISSING_TABLES[:4]:
                 await conn.run_sync(lambda c, name=name: Base.metadata.tables[name].create(c))
             await conn.execute(
                 text(

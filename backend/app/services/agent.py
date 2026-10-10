@@ -160,6 +160,7 @@ class AgentState(TypedDict):
     intent: str
     answer: str
     error: str
+    memory_context: str
 
 
 def _keyword_intent(text: str) -> str:
@@ -258,6 +259,8 @@ async def _agent_node(state: AgentState) -> dict:
         llm_with_tools = llm
         system = CHAT_SYSTEM_PROMPT
 
+    if state.get("memory_context"):
+        system += "\n" + state["memory_context"]
     messages = state["messages"]
     try:
         resp = await llm_with_tools.ainvoke([("system", system), *messages])
@@ -333,7 +336,9 @@ async def _get_agent():
     return _agent_instance
 
 
-def _build_initial_state(user_input: str, history: list[dict] | None = None) -> AgentState:
+def _build_initial_state(
+    user_input: str, history: list[dict] | None = None, memory_context: str = ""
+) -> AgentState:
     """构造 Agent 初始状态。
 
     history 为历史消息列表（[{"role": "user"/"assistant", "content": ...}]），
@@ -351,6 +356,7 @@ def _build_initial_state(user_input: str, history: list[dict] | None = None) -> 
 
     return {
         "messages": messages,
+        "memory_context": memory_context,
         "intent": "",
         "answer": "",
         "error": "",
@@ -370,6 +376,7 @@ async def chat(
     user_input: str,
     user_id: int | None = None,
     history: list[dict] | None = None,
+    memory_context: str = "",
 ) -> dict:
     """对话入口（单轮/多轮）。返回 {intent, answer}。
 
@@ -382,13 +389,18 @@ async def chat(
     single 走原来的单 Agent ReAct。intent 字段仍按旧词表返回，避免破坏前端。
     """
     if use_multi_agent():
-        result = await multi_agent.chat_multi(user_input, user_id, history=history)
+        result = await multi_agent.chat_multi(
+            user_input,
+            user_id,
+            history=history,
+            **({"memory_context": memory_context} if memory_context else {}),
+        )
         return {
             "intent": multi_agent.to_legacy_intent(list(result.get("domains") or [])),
             "answer": result.get("answer", ""),
         }
 
-    initial = _build_initial_state(user_input, history)
+    initial = _build_initial_state(user_input, history, memory_context)
     token = set_current_user_id(user_id)
     try:
         ag = await _get_agent()
@@ -405,6 +417,7 @@ async def chat_stream(
     user_input: str,
     user_id: int | None = None,
     history: list[dict] | None = None,
+    memory_context: str = "",
 ):
     """流式对话入口（SSE）。逐 token yield，最后 yield 最终意图。
 
@@ -418,12 +431,16 @@ async def chat_stream(
         domains = await multi_agent.plan_domains(user_input, history=history)
         yield {"type": "intent", "intent": multi_agent.to_legacy_intent(domains)}
         async for event in multi_agent.chat_multi_stream(
-            user_input, user_id, domains, history=history
+            user_input,
+            user_id,
+            domains,
+            history=history,
+            **({"memory_context": memory_context} if memory_context else {}),
         ):
             yield event
         return
 
-    initial = _build_initial_state(user_input, history)
+    initial = _build_initial_state(user_input, history, memory_context)
     token = set_current_user_id(user_id)
     final_intent = "chat"
     try:
@@ -469,6 +486,7 @@ async def chat_stream_with_images(
     user_input: str,
     image_urls: list[str],
     history: list[dict] | None = None,
+    memory_context: str = "",
 ):
     """带图片的流式对话：直接走视觉模型。
 
@@ -484,7 +502,11 @@ async def chat_stream_with_images(
     model = settings.VISION_MODEL or None
     try:
         async for piece in llm_client.astream_multimodal(
-            user_input, image_urls, system=VISION_SYSTEM_PROMPT, provider=provider, model=model
+            user_input,
+            image_urls,
+            system=VISION_SYSTEM_PROMPT + ("\n" + memory_context if memory_context else ""),
+            provider=provider,
+            model=model,
         ):
             yield {"type": "token", "content": piece}
     except Exception as exc:
@@ -527,10 +549,13 @@ async def chat_with_images(
     user_input: str,
     image_urls: list[str],
     history: list[dict] | None = None,
+    memory_context: str = "",
 ) -> dict:
     """非流式版本（/chat 同步接口用）：把流式结果拼起来。"""
     parts: list[str] = []
-    async for evt in chat_stream_with_images(user_input, image_urls, history=history):
+    async for evt in chat_stream_with_images(
+        user_input, image_urls, history=history, memory_context=memory_context
+    ):
         if evt.get("type") == "token":
             parts.append(evt.get("content", ""))
     return {"intent": "vision", "answer": "".join(parts)}

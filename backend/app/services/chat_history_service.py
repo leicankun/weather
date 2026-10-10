@@ -1,7 +1,7 @@
 """对话历史服务：多轮对话上下文的持久化与读取。
 
-- add_message：保存一轮对话（用户提问 / AI 回答）
-- get_recent_history：读取某会话最近 N 轮，用于构造多轮上下文
+- add_turn：事务内保存一轮提问与最终回答；add_message 保存单条消息
+- get_recent_history：读取某会话最近 N 条消息，用于构造多轮上下文
 - list_conversations：会话列表（供前端「历史对话」侧栏）
 - get_conversation_messages：读取整个会话的消息（供前端回放）
 - delete_conversation：删除整个会话
@@ -23,6 +23,25 @@ HISTORY_LIMIT = 10
 
 # 会话列表扫描的原始消息上限（用于在内存中分组，避免复杂 SQL 聚合）
 CONVERSATION_SCAN_LIMIT = 500
+
+
+async def add_turn(
+    user_id: int, conversation_id: str, user_content: str, assistant_content: str
+) -> tuple[int, int]:
+    """同一事务保存完整一轮，避免并发请求交错或只保存半轮。"""
+    async with AsyncSessionLocal() as db:
+        user = ChatMessage(
+            user_id=user_id, conversation_id=conversation_id, role="user", content=user_content
+        )
+        assistant = ChatMessage(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            role="assistant",
+            content=assistant_content,
+        )
+        db.add_all([user, assistant])
+        await db.commit()
+        return user.id, assistant.id
 
 
 async def add_message(

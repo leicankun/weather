@@ -12,9 +12,20 @@ from app.core.deps import CurrentUser, OptionalUser
 from app.core.response import success
 from app.db.session import get_db
 from app.schemas.chat import ChatRequest, ChatResponse
-from app.services import agent, attachment_service, chat_history_service
+from app.services import agent, attachment_service, chat_history_service, memory_service
 
 router = APIRouter(prefix="/api/v1/chat", tags=["AI 对话"])
+
+
+async def _save_turn(user_id, conversation_id, stored_message, answer, typed_message):
+    if user_id is None or not answer:
+        return
+    user_message_id, assistant_message_id = await chat_history_service.add_turn(
+        user_id, conversation_id, stored_message, answer
+    )
+    await memory_service.remember_turn(
+        user_id, user_message_id, assistant_message_id, typed_message
+    )
 
 
 def _default_ask(items: list) -> str:
@@ -139,19 +150,18 @@ async def chat(body: ChatRequest, current: OptionalUser = None) -> dict:
     # 读取历史（仅登录用户），构造多轮上下文
     history = await chat_history_service.get_recent_history(user_id, conversation_id)
 
+    memory_context = await memory_service.prepare_context(user_id, conversation_id, body.message)
+    memory_kwargs = {"memory_context": memory_context} if memory_context else {}
+
     # 带图片时走视觉模型（不调工具，原因见 agent.chat_stream_with_images）
     result = (
-        await agent.chat_with_images(prompt, images, history=history)
+        await agent.chat_with_images(prompt, images, history=history, **memory_kwargs)
         if images
-        else await agent.chat(prompt, user_id=user_id, history=history)
+        else await agent.chat(prompt, user_id=user_id, history=history, **memory_kwargs)
     )
 
     # 持久化本轮对话（登录用户）
-    if user_id is not None:
-        await chat_history_service.add_message(user_id, conversation_id, "user", stored_message)
-        await chat_history_service.add_message(
-            user_id, conversation_id, "assistant", result["answer"]
-        )
+    await _save_turn(user_id, conversation_id, stored_message, result["answer"], body.message)
 
     data = ChatResponse(**result).model_dump()
     data["conversation_id"] = conversation_id
@@ -176,20 +186,28 @@ async def chat_stream(body: ChatRequest, current: OptionalUser = None):
     prompt = await _with_preferences(prompt, user_id)
     history = await chat_history_service.get_recent_history(user_id, conversation_id)
 
+    memory_context = await memory_service.prepare_context(user_id, conversation_id, body.message)
+    memory_kwargs = {"memory_context": memory_context} if memory_context else {}
+
     async def event_generator():
         full_answer = ""
+        done_event = {"type": "done", "conversation_id": conversation_id}
         try:
             stream = (
-                agent.chat_stream_with_images(prompt, images, history=history)
+                agent.chat_stream_with_images(prompt, images, history=history, **memory_kwargs)
                 if images
-                else agent.chat_stream(prompt, user_id=user_id, history=history)
+                else agent.chat_stream(prompt, user_id=user_id, history=history, **memory_kwargs)
             )
             async for evt in stream:
                 etype = evt.get("type")
                 if etype == "token":
                     full_answer += evt.get("content", "")
+                if etype == "done":
+                    done_event.update(evt)
+                    continue
                 yield {"event": "message", "data": json.dumps(evt, ensure_ascii=False)}
         except Exception:  # noqa: BLE001
+            full_answer += "抱歉，AI 服务暂时不可用，请稍后重试。"
             yield {
                 "event": "message",
                 "data": json.dumps(
@@ -199,13 +217,9 @@ async def chat_stream(body: ChatRequest, current: OptionalUser = None):
             }
         finally:
             # 流式结束后持久化（登录用户）
-            if user_id is not None and full_answer:
-                await chat_history_service.add_message(
-                    user_id, conversation_id, "user", stored_message
-                )
-                await chat_history_service.add_message(
-                    user_id, conversation_id, "assistant", full_answer
-                )
+            await _save_turn(user_id, conversation_id, stored_message, full_answer, body.message)
+        # done 在原始对话及记忆处理结束后发出，紧接下一轮即可读取。
+        yield {"event": "message", "data": json.dumps(done_event, ensure_ascii=False)}
 
     return EventSourceResponse(event_generator())
 

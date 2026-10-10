@@ -5,6 +5,7 @@ from app.models.itinerary import Itinerary
 from app.models.knowledge import KnowledgeChunk
 from app.models.landmark import Landmark
 from app.models.life_index import LifeIndexRecord
+from app.models.memory import MemoryCard, MemoryEpisode, MemoryState
 from app.models.news import News
 from app.models.notification import NotificationLog, NotificationPref, PushSubscription
 from app.models.trip_note import TripNote
@@ -22,6 +23,9 @@ __all__ = [
     "KnowledgeChunk",
     "Landmark",
     "LifeIndexRecord",
+    "MemoryCard",
+    "MemoryEpisode",
+    "MemoryState",
     "News",
     "NotificationLog",
     "NotificationPref",
