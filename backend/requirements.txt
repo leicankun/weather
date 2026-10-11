@@ -17,7 +17,10 @@ geoalchemy2>=0.15.0
 alembic>=1.13.3
 langchain-openai>=0.3.0
 langgraph>=0.2.60
-langchain-core>=0.3.0
+langchain-core>=1.4.4,<2
+langchain-classic>=1.0.8,<2
+langchain-community>=0.4.2,<0.5
+rank-bm25>=0.2.2,<0.3
 mcp>=1.0.0
 langchain-mcp-adapters>=0.1.0
 # Web Push 发送（Day 34 引入）。之前只装在本地 venv 里没写进来，

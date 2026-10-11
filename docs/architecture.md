@@ -10,7 +10,7 @@ AI 对话 → agent.py（single）或 multi_agent.py（multi）→ LangChain 模
 
 多智能体专业领域回答新增核验：并行领域工具证据合并，多领域先汇总、单领域跳过汇总，再交给独立 `verify` 节点核对问题与原始证据。最多修正一次并复查，核验故障或仍不通过时不发布草稿。有专业领域的 SSE 等核验完成再发送完整答案；通用闲聊继续流式。核验复用默认模型，并非外部事实认证；详情见 [AGENT_VERIFICATION.md](AGENT_VERIFICATION.md)。
 
-公共与个人知识库共用 BM25 + pgvector 双路召回，再以 RRF 融合排名，随后调用百炼 `gte-rerank-v2` 对融合候选重排序。BM25 使用中文搜索分词；私有语料、两路检索和发送到排序模型的候选均按用户隔离。每路默认召回 30 条，RRF 前 30 条参与重排，最后取 Top-K；未配置百炼 Key、显式关闭或调用失败时保留 RRF 顺序。配置、分数含义和规模限制见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
+公共、个人知识库与历史记忆共用 LangChain 混合检索：BM25 Retriever + 自定义 pgvector Retriever 双路并行召回，经原生 EnsembleRetriever 做 RRF 融合，再通过 ContextualCompressionRetriever 和百炼 `gte-rerank-v2` compressor 重排。使用现有业务表与智谱 1024 维向量；BM25 保留中文搜索分词与正 IDF。私有语料、两路检索和发送到排序模型的候选均按用户隔离。每路默认召回 30 条，RRF 前 30 条参与重排，最后取 Top-K；未配置百炼 Key、显式关闭或调用失败时保留 RRF 顺序。组件及调用方式见 [LANGCHAIN_RAG.md](LANGCHAIN_RAG.md)，配置、分数含义和规模限制见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
 
 ## 前端目录
 

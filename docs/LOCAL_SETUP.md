@@ -55,7 +55,7 @@ setup 会创建 backend/.venv、安装依赖，首次生成 backend/.env 和随�
 
 使用多智能体多轮文本对话时，设置 `AGENT_MODE=multi` 并重启后端。登录后在同一个会话中继续提问；后端自动保存每轮提问和最终回答，并读取会话摘要与尚未摘要的原始消息。每五轮检查一次，短期历史超过默认 6000 字符才压缩旧消息，最近五轮保留原文。更新后执行 `./scripts/dev.ps1 migrate` 创建 `0017_chat_summaries` 并重启后端，无需新增必填 Key 或修改已有 `.env`。客户端调用 `/api/v1/chat` 或 `/api/v1/chat/stream` 时，需要持续传入相同的 `conversation_id`，普通接口会返回该 ID；流式客户端应自行生成并复用。新会话和不同用户的短期历史互不共享，匿名对话不持久化。参数、摘要失败降级和长期记忆的区别见 [CHAT_SUMMARY.md](CHAT_SUMMARY.md)。
 
-知识库默认使用 BM25 + 向量混合检索、RRF 融合及 `gte-rerank-v2` 重排序，包含 `jieba` 中文分词依赖。配置百炼 Key 并重启后端、运行中的 worker 和独立 MCP 服务即可启用重排，不需要安装 DashScope SDK 或新增迁移。缺少百炼 Key 或排序失败时返回 RRF 结果。仅为启用 BM25/重排序无需重新生成向量；从本地兜底向量切换至智谱真实 Embedding 时，仍需重建已有资料向量。参数、配置示例和返回分数含义见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
+知识库与历史 RAG 默认使用 LangChain 编排的 BM25 + 向量混合检索、RRF 融合及 `gte-rerank-v2` 重排序。更新后执行 `backend/.venv/Scripts/python.exe -m pip install -r backend/requirements.txt` 安装新增的 `langchain-classic`、`langchain-community` 和 `rank-bm25`，然后重启后端、运行中的 worker 和独立 MCP 服务。保留 `jieba` 中文分词和已有百炼 Key，不需要安装 DashScope SDK 或新增迁移。缺少百炼 Key 或排序失败时返回 RRF 结果。仅为切换检索编排无需重新生成向量；从本地兜底向量切换至智谱真实 Embedding 时，仍需重建已有资料向量。组件见 [LANGCHAIN_RAG.md](LANGCHAIN_RAG.md)，参数、配置示例和返回分数含义见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
 
 ## 双层长期记忆
 

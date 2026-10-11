@@ -1,4 +1,4 @@
-"""RAG 知识库服务：向量入库与 BM25 / 向量混合检索。
+"""RAG 知识库服务：向量入库与 LangChain 混合检索。
 
 - build_index(): 扫描 knowledge_base 文档 -> 分块 -> embedding -> 写入 knowledge_chunks（upsert）
 - search(): BM25 + pgvector 召回 -> RRF 融合 -> gte-rerank-v2 重排 -> TopK
@@ -101,7 +101,7 @@ async def search(
     top_k: int | None = None,
     use_celery_engine: bool = False,
 ) -> list[dict[str, Any]]:
-    """双路召回后按 RRF 排名返回，similarity 保留原来的余弦相似度含义。"""
+    """LangChain 双路召回、RRF 和重排；similarity 保留余弦相似度含义。"""
     top_k = settings.EMBED_TOP_K if top_k is None else top_k
     if not query.strip():
         raise ValueError("查询文本不能为空")

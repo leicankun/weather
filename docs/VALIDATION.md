@@ -223,3 +223,19 @@ API 回归使用真实数据库和完整多智能体图，模型替身覆盖单�
 | 实际运行的 HTTP 后端与聊天接口 | 公共搜索 HTTP 200，重排分数非 null；匿名聊天早茶/广州塔 2 次均 HTTP 200、`code=0`、`intent=knowledge` |
 
 14 组测试使用 FastAPI ASGI 直连、真实 PostgreSQL、真实模型 API；通过项目 `llm_client` 将检索上下文交给 DeepSeek，未执行 Agent 工具决策流程。额外 2 次 `/api/v1/chat` 使用正在运行的 HTTP 服务，覆盖当前 single Agent 入口。资料问答批次采用更严格的依据资料提示词；聊天回答仍有少量未直接被资料支持的补充建议，详见 [完整测试报告](RAG_LIVE_TEST_2026-10-10.md)。匿名聊天不写历史，无临时私有资料或临时服务器；本地 `.env` 与既有 Embedding 客户端编辑保持不变。
+
+## 2026-10-11：LangChain 混合检索编排
+
+公共、个人知识库和历史 RAG 共用 LangChain BM25 Retriever、自定义 pgvector Retriever、原生 Ensemble RRF 和 ContextualCompressionRetriever / 百炼 rerank compressor。保留已有业务表、1024 维向量、接口字段、用户范围与重排失败回退；新增框架依赖，不改 `.env`，不用重建已有向量或新增迁移。
+
+| 检查 | 结果 |
+| --- | --- |
+| `python -m ruff check .` | 通过 |
+| 本次 6 个 Python 文件格式检查 | 通过 |
+| 全库 `ruff format --check .` | 222 个文件通过，只有任务前已有的 `embedding_client.py:81` 行尾空格未通过，保留该本地编辑 |
+| `python -m pip check` | 通过，无依赖冲突 |
+| 完整回归中的检索、重排、记忆与迁移用例 | 87 项通过，其中 11 项新增 LangChain 用例 |
+| `python -m pytest` | 838 项通过、2 项失败、无跳过；覆盖率 64%；失败仍为原有通知公钥和默认偏好用例 |
+| 真实模型/API 验收 | 7 个场景通过，使用真实开发 PostgreSQL、智谱 Embedding、百炼重排和 DeepSeek；无模型回退，临时账号清理后数量为 0 |
+
+真实验收包含 3 个公共检索问题、私有订单检索、其他用户隔离、历史消息排除和 1 次原生 LangChain 资料问答；没有重新评估整套 single/multi Agent 工具决策或迁移前后检索质量。前端未改动，未重复前端检查。详细方法、边界和原始结果见 [LANGCHAIN_RAG_VALIDATION_2026-10-11.md](LANGCHAIN_RAG_VALIDATION_2026-10-11.md) 与 [JSON](LANGCHAIN_RAG_LIVE_2026-10-11.json)。
