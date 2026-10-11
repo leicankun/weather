@@ -81,6 +81,33 @@ def build_verification_prompt(state: dict, draft: str) -> str:
     evidence = []
     budget = 30000
     omitted = 0
+    history = []
+    history_budget = 16000
+    history_truncated = False
+    source_history = state.get("history") or []
+    summaries = [item for item in source_history if item.get("role") == "summary"]
+    raw_history = [item for item in source_history if item.get("role") != "summary"]
+    # 先为摘要留预算，再优先保留最新原文；正常预算内过渡消息全部传递。
+    for item in summaries:
+        content = item.get("content", "")
+        limit = min(2500, history_budget)
+        if limit <= 0:
+            history_truncated = True
+            break
+        history.append({"role": item.get("role"), "content": content[:limit]})
+        history_budget -= len(content[:limit])
+        history_truncated |= len(content) > limit
+    latest = []
+    for item in reversed(raw_history):
+        content = item.get("content", "")
+        limit = min(1000, history_budget)
+        if limit <= 0:
+            history_truncated = True
+            break
+        latest.append({"role": item.get("role"), "content": content[:limit]})
+        history_budget -= len(content[:limit])
+        history_truncated |= len(content) > limit
+    history.extend(reversed(latest))
     for key, records in sorted((state.get("domain_evidence") or {}).items()):
         for record in records:
             size = len(json.dumps(record, ensure_ascii=False, default=str))
@@ -92,10 +119,7 @@ def build_verification_prompt(state: dict, draft: str) -> str:
     data = {
         "current_time_shanghai": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
         "question": state["question"][:4000],
-        "history": [
-            {"role": item.get("role"), "content": item.get("content", "")[:1000]}
-            for item in (state.get("history") or [])[-10:]
-        ],
+        "history": history,
         "memory_context": state.get("memory_context", "")[:6000],
         "domain_answers": {
             key: value[:2000] for key, value in (state.get("domain_answers") or {}).items()
@@ -107,9 +131,7 @@ def build_verification_prompt(state: dict, draft: str) -> str:
         "context_truncated": (
             len(state["question"]) > 4000
             or len(state.get("memory_context", "")) > 6000
-            or any(
-                len(item.get("content", "")) > 1000 for item in (state.get("history") or [])[-10:]
-            )
+            or history_truncated
             or any(len(value) > 2000 for value in (state.get("domain_answers") or {}).values())
         ),
         "schema": AnswerReview.model_json_schema(),

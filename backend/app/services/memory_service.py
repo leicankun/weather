@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.chat_message import ChatMessage
+from app.models.chat_summary import ChatSummary
 from app.models.memory import MemoryCard, MemoryEpisode, MemoryState
 from app.schemas.memory import CardExtraction, CardPatch
 from app.services.embedding_client import embedding_client
@@ -318,19 +319,21 @@ async def prepare_context(user_id: int | None, conversation_id: str, query: str)
     async def recall():
         await _safe("backfill", index_history(user_id))
         async with AsyncSessionLocal() as db:
-            recent_ids = list(
-                (
-                    await db.scalars(
-                        select(ChatMessage.id)
-                        .where(
-                            ChatMessage.user_id == user_id,
-                            ChatMessage.conversation_id == conversation_id,
-                        )
-                        .order_by(ChatMessage.id.desc())
-                        .limit(10)
-                    )
-                ).all()
+            recent_query = (
+                select(ChatMessage.id)
+                .where(
+                    ChatMessage.user_id == user_id,
+                    ChatMessage.conversation_id == conversation_id,
+                )
+                .order_by(ChatMessage.id.desc())
             )
+            if settings.CHAT_SUMMARY_ENABLED:
+                state = await db.get(ChatSummary, (user_id, conversation_id))
+                covered = (state.covered_message_id or 0) if state else 0
+                recent_query = recent_query.where(ChatMessage.id > covered)
+            else:
+                recent_query = recent_query.limit(10)
+            recent_ids = list((await db.scalars(recent_query)).all())
         found = await search_history(user_id, query, settings.MEMORY_HISTORY_TOP_K, recent_ids)
         return _bounded(
             [{"source": item["source"], "content": item["content"]} for item in found],

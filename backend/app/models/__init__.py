@@ -1,4 +1,5 @@
 from app.models.chat_message import ChatMessage
+from app.models.chat_summary import ChatSummary
 from app.models.clean_task import CleanTask
 from app.models.feedback import Feedback
 from app.models.itinerary import Itinerary
@@ -17,6 +18,7 @@ from app.models.weather_alert import WeatherAlert
 
 __all__ = [
     "ChatMessage",
+    "ChatSummary",
     "CleanTask",
     "Feedback",
     "Itinerary",

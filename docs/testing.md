@@ -16,6 +16,8 @@
 
 每次验证的实际通过数、跳过数、环境限制记录在 VALIDATION.md。不能把 no-db 或前端 mock 测试表述成全栈联调成功。
 
+短期会话摘要回归：`python -m pytest tests/api/test_chat_summary.py tests/unit/test_chat_summary_context.py tests/api/test_chat_history.py tests/api/test_memory.py tests/api/test_migrations.py tests/unit/test_answer_verification.py -o addopts= -q`。真实 PostgreSQL 和模型替身验证每五轮检查、超字符预算才压缩、保留最近五轮、过渡消息不丢失、摘要更新与删除并发、模型故障/超时、普通/SSE 单/多模式及原始聊天保留。测试默认关闭摘要外部调用，新用例显式开启。真实模型/API 验收使用 `python -m app.scripts.verify_chat_summary`；临时合成账号、开发库和已配置付费模型，结束清理，不修改 `.env`，已有报告拒绝覆盖。设计与配置见 [CHAT_SUMMARY.md](CHAT_SUMMARY.md)。
+
 多智能体回答核验：`python -m pytest tests/unit/test_answer_verification.py tests/unit/test_multi_agent.py tests/unit/test_compare_agents.py --no-db -o addopts= -q`，覆盖独立核验、工具证据交接、修正复查、异常不发布及 SSE 草稿隔离。真实模型与普通/SSE 接口验收：`python -m app.scripts.verify_multi_agent`，会调用付费 API；已有输出拒绝覆盖，可传 `--output` 指定新路径。测试方法与模型漏检边界见 [核验文档](AGENT_VERIFICATION.md) 和 [实际验收](AGENT_VERIFICATION_LIVE_2026-10-10.md)。
 
 单 / 多 Agent 对照入口回归：`python -m pytest tests/unit/test_compare_agents.py tests/unit/test_multi_agent.py tests/unit/test_agent_intent.py --no-db -o addopts= -q`，验证初始路由、相同背景与用户身份、真实图执行及工具追踪。真实模型对照使用 `python -m app.scripts.compare_agents_live`：12 个问题加 3 次重复、30 份回答，使用开发库临时合成账号和真实付费 API，结束清理账号；不修改 `.env` 或保存模型回答到聊天历史。报告默认覆盖 `docs/AGENT_COMPARISON_<日期>.json`；人工评估见 [2026-10-10 对照报告](AGENT_COMPARISON_2026-10-10.md)，不得把回退路线估算或无依据的新增内容算作多 Agent 优势。

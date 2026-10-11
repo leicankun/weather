@@ -211,7 +211,7 @@ def _messages_with_history(
     ]
     for message in history or []:
         content = message.get("content", "")
-        if message.get("role") == "user":
+        if message.get("role") in {"user", "summary"}:
             messages.append(HumanMessage(content=content))
         elif message.get("role") == "assistant":
             messages.append(AIMessage(content=content))

@@ -1,5 +1,6 @@
 """对话接口：单轮/多轮 AI 对话（LangGraph Agent + MCP 工具 + RAG + SSE 流式）+ 多模态附件。"""
 
+import asyncio
 import json
 import uuid
 from typing import Annotated
@@ -12,7 +13,13 @@ from app.core.deps import CurrentUser, OptionalUser
 from app.core.response import success
 from app.db.session import get_db
 from app.schemas.chat import ChatRequest, ChatResponse
-from app.services import agent, attachment_service, chat_history_service, memory_service
+from app.services import (
+    agent,
+    attachment_service,
+    chat_history_service,
+    chat_summary_service,
+    memory_service,
+)
 
 router = APIRouter(prefix="/api/v1/chat", tags=["AI 对话"])
 
@@ -23,8 +30,9 @@ async def _save_turn(user_id, conversation_id, stored_message, answer, typed_mes
     user_message_id, assistant_message_id = await chat_history_service.add_turn(
         user_id, conversation_id, stored_message, answer
     )
-    await memory_service.remember_turn(
-        user_id, user_message_id, assistant_message_id, typed_message
+    await asyncio.gather(
+        memory_service.remember_turn(user_id, user_message_id, assistant_message_id, typed_message),
+        chat_summary_service.check_and_compress(user_id, conversation_id, assistant_message_id),
     )
 
 
@@ -148,7 +156,7 @@ async def chat(body: ChatRequest, current: OptionalUser = None) -> dict:
     prompt = await _with_preferences(prompt, user_id)
 
     # 读取历史（仅登录用户），构造多轮上下文
-    history = await chat_history_service.get_recent_history(user_id, conversation_id)
+    history = await chat_summary_service.get_context(user_id, conversation_id)
 
     memory_context = await memory_service.prepare_context(user_id, conversation_id, body.message)
     memory_kwargs = {"memory_context": memory_context} if memory_context else {}
@@ -184,7 +192,7 @@ async def chat_stream(body: ChatRequest, current: OptionalUser = None):
     prompt, images, stored_message = await _prepare_input(body)
     # 用户偏好注入（Day 55）：登录用户才生效，读取失败不拦对话
     prompt = await _with_preferences(prompt, user_id)
-    history = await chat_history_service.get_recent_history(user_id, conversation_id)
+    history = await chat_summary_service.get_context(user_id, conversation_id)
 
     memory_context = await memory_service.prepare_context(user_id, conversation_id, body.message)
     memory_kwargs = {"memory_context": memory_context} if memory_context else {}

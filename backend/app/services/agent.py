@@ -341,7 +341,7 @@ def _build_initial_state(
 ) -> AgentState:
     """构造 Agent 初始状态。
 
-    history 为历史消息列表（[{"role": "user"/"assistant", "content": ...}]），
+    history 为历史消息列表（role 为 user/assistant/summary），
     按时间正序传入，用于多轮上下文。空/None 时为单轮。
     """
     messages: list = []
@@ -350,7 +350,7 @@ def _build_initial_state(
         content = msg.get("content", "")
         if role == "assistant":
             messages.append(AIMessage(content=content))
-        elif role == "user":
+        elif role in {"user", "summary"}:
             messages.append(HumanMessage(content=content))
     messages.append(HumanMessage(content=user_input))
 

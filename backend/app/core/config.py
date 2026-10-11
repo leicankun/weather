@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     # 出问题改一行配置就能退回旧路径，不用重新发版。
     AGENT_MODE: str = "single"
 
+    # 短期会话摘要：每五轮检查，只在历史字符预算超限时压缩，最近五轮保留原文。
+    CHAT_SUMMARY_ENABLED: bool = True
+    CHAT_SUMMARY_TRIGGER_CHARS: int = Field(default=6000, ge=500, le=100000)
+    CHAT_SUMMARY_MAX_CHARS: int = Field(default=1200, ge=200, le=2000)
+    CHAT_SUMMARY_TIMEOUT: float = Field(default=20.0, gt=0, le=60)
+
     # 双层记忆：每轮注入有限的偏好/事实卡片，需要回忆时检索历史。
     MEMORY_ENABLED: bool = True
     MEMORY_CARD_LIMIT: int = Field(default=30, ge=1, le=100)

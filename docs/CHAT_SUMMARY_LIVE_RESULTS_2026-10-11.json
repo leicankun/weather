@@ -1,0 +1,56 @@
+{
+  "at": "2026-10-11T04:51:18.344597+00:00",
+  "cases": [
+    {
+      "mode": "single",
+      "path": "/api/v1/chat",
+      "question": "只根据本会话背景，说出本次活动代号、集合点和更正后的预算；不要调用外部工具。",
+      "answer": "活动代号：纸鸢7429；集合点：星河书店；更正后预算：800元。",
+      "seconds": 3.34
+    },
+    {
+      "mode": "single",
+      "path": "/api/v1/chat/stream",
+      "question": "只根据本会话背景，说出本次活动代号、集合点和更正后的预算；不要调用外部工具。",
+      "answer": "活动代号：纸鸢7429；集合点：星河书店；更正后预算：800元。",
+      "seconds": 2.61
+    },
+    {
+      "mode": "multi",
+      "path": "/api/v1/chat",
+      "question": "只根据本会话背景，说出本次活动代号、集合点和更正后的预算；不要调用外部工具。",
+      "answer": "活动代号：纸鸢7429；集合点：星河书店；更正后预算：800元。",
+      "seconds": 1.98
+    },
+    {
+      "mode": "multi",
+      "path": "/api/v1/chat/stream",
+      "question": "只根据本会话背景，说出本次活动代号、集合点和更正后的预算；不要调用外部工具。",
+      "answer": "活动代号：纸鸢7429；集合点：星河书店；更正后预算：800元。",
+      "seconds": 1.3
+    },
+    {
+      "mode": "multi",
+      "path": "/api/v1/chat",
+      "question": "只根据本会话背景，说出本次活动代号、集合点和更正后的预算；不要调用外部工具。",
+      "answer": "抱歉，本会话中你还没有提供活动代号、集合点和预算信息，我无法凭空得知。请补充这些内容，我再帮你确认。",
+      "seconds": 2.97
+    }
+  ],
+  "checks": {
+    "no_summary_before_tenth_turn": true,
+    "summary_and_latest_five_turns": true,
+    "single_multi_and_sse_recall": true,
+    "intermediate_messages_retained": true,
+    "user_isolation": true,
+    "raw_messages_preserved": true,
+    "conversation_deletion": true
+  },
+  "passed": true,
+  "summary": {
+    "content": "【用户已确认信息】活动代号：纸鸢7429；集合点：星河书店；预算：原为500元，用户在第3轮明确更正为800元（集合点与代号不变）。用户多次补充（第2、4、5轮）：希望少步行、室内优先。\n\n【待解决/未定】活动具体路线与细节仍在讨论中，需结合同行者意见后再决定；餐厅未定。\n\n【助手建议（用户尚未确认，非用户事实）】可考虑室内观展，餐厅待定。\n\n【注意】预算以用户更正的800元为准，不再使用500元；集合点、代号未变。",
+    "version": 1,
+    "characters": 210
+  },
+  "temporary_users_cleaned": true
+}

@@ -31,6 +31,7 @@ MISSING_TABLES = (
     "memory_cards",
     "memory_episodes",
     "memory_states",
+    "chat_summaries",
 )
 
 

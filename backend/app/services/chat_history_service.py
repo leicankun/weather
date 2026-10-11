@@ -12,11 +12,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
 from app.models.chat_message import ChatMessage
+from app.models.chat_summary import ChatSummary
 
 # 拼进多轮上下文的历史条数（取最近 N 条消息，超出截断）
 HISTORY_LIMIT = 10
@@ -25,11 +26,20 @@ HISTORY_LIMIT = 10
 CONVERSATION_SCAN_LIMIT = 500
 
 
+async def lock_conversation(db: AsyncSession, user_id: int, conversation_id: str) -> None:
+    """跨进程串行化同一会话的保存、摘要提交和删除；不持锁调用模型。"""
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(7317, hashtext(:scope))"),
+        {"scope": f"{user_id}:{conversation_id}"},
+    )
+
+
 async def add_turn(
     user_id: int, conversation_id: str, user_content: str, assistant_content: str
 ) -> tuple[int, int]:
     """同一事务保存完整一轮，避免并发请求交错或只保存半轮。"""
     async with AsyncSessionLocal() as db:
+        await lock_conversation(db, user_id, conversation_id)
         user = ChatMessage(
             user_id=user_id, conversation_id=conversation_id, role="user", content=user_content
         )
@@ -215,6 +225,13 @@ async def delete_conversation(
     session = db or AsyncSessionLocal()
 
     async def _run(s: AsyncSession) -> int:
+        await lock_conversation(s, user_id, conversation_id)
+        await s.execute(
+            delete(ChatSummary).where(
+                ChatSummary.user_id == user_id,
+                ChatSummary.conversation_id == conversation_id,
+            )
+        )
         result = await s.execute(
             delete(ChatMessage).where(
                 ChatMessage.user_id == user_id,
