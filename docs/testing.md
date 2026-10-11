@@ -16,6 +16,8 @@
 
 每次验证的实际通过数、跳过数、环境限制记录在 VALIDATION.md。不能把 no-db 或前端 mock 测试表述成全栈联调成功。
 
+文档分块回归：`python -m pytest tests/unit/test_knowledge_chunking.py tests/api/test_chunking_knowledge_api.py -o addopts= -q`，覆盖标题与重叠隔离、代码围栏、段／句回退、超长硬切、字符覆盖及真实数据库公共/个人入库。纯切分可加 `--no-db` 只运行单元文件。真实模型/API 验收：`python -m app.scripts.verify_chunking --output ../docs/CHUNKING_LIVE_2026-10-11_FINAL.json`，调用配置的付费 Embedding/rerank API，以临时账号上传、检索、删除并清理账号；已有报告拒绝覆盖，复测需选择新路径。结果见 [CHUNKING_VALIDATION_2026-10-11.md](CHUNKING_VALIDATION_2026-10-11.md)。
+
 LangChain 检索编排回归：`python -m pytest tests/unit/test_langchain_retrieval.py tests/api/test_langchain_knowledge.py tests/unit/test_hybrid_retrieval.py tests/unit/test_rerank_client.py tests/api/test_hybrid_knowledge.py tests/api/test_rerank_knowledge.py tests/api/test_memory.py -o addopts= -q`。验证原生 Ensemble RRF、并行召回、callbacks、Document 元数据、标准资料问答链组合，以及现有接口/历史/用户隔离和故障降级。真实模型/API 验收：`python -m app.scripts.verify_langchain_rag --output ../docs/LANGCHAIN_RAG_LIVE_2026-10-11.json`，创建并清理临时合成账号，调用已配置付费 API，已有报告拒绝覆盖。实际结果见 [LANGCHAIN_RAG_VALIDATION_2026-10-11.md](LANGCHAIN_RAG_VALIDATION_2026-10-11.md)。
 
 短期会话摘要回归：`python -m pytest tests/api/test_chat_summary.py tests/unit/test_chat_summary_context.py tests/api/test_chat_history.py tests/api/test_memory.py tests/api/test_migrations.py tests/unit/test_answer_verification.py -o addopts= -q`。真实 PostgreSQL 和模型替身验证每五轮检查、超字符预算才压缩、保留最近五轮、过渡消息不丢失、摘要更新与删除并发、模型故障/超时、普通/SSE 单/多模式及原始聊天保留。测试默认关闭摘要外部调用，新用例显式开启。真实模型/API 验收使用 `python -m app.scripts.verify_chat_summary`；临时合成账号、开发库和已配置付费模型，结束清理，不修改 `.env`，已有报告拒绝覆盖。设计与配置见 [CHAT_SUMMARY.md](CHAT_SUMMARY.md)。

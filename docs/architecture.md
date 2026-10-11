@@ -12,6 +12,8 @@ AI 对话 → agent.py（single）或 multi_agent.py（multi）→ LangChain 模
 
 公共、个人知识库与历史记忆共用 LangChain 混合检索：BM25 Retriever + 自定义 pgvector Retriever 双路并行召回，经原生 EnsembleRetriever 做 RRF 融合，再通过 ContextualCompressionRetriever 和百炼 `gte-rerank-v2` compressor 重排。使用现有业务表与智谱 1024 维向量；BM25 保留中文搜索分词与正 IDF。私有语料、两路检索和发送到排序模型的候选均按用户隔离。每路默认召回 30 条，RRF 前 30 条参与重排，最后取 Top-K；未配置百炼 Key、显式关闭或调用失败时保留 RRF 顺序。组件及调用方式见 [LANGCHAIN_RAG.md](LANGCHAIN_RAG.md)，配置、分数含义和规模限制见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
 
+公共与个人文档在 Embedding 前共用标题分块器：Markdown ATX 标题是硬边界，chunk 和 overlap 均不跨标题；区域内部开最多 300 字符窗口，按段末／句末回退，只有超长单元素才硬切。默认重叠最多 50 字符，优先保留完整段／句。实现与已有索引更新方式见 [CHUNKING.md](CHUNKING.md)。
+
 ## 前端目录
 
 - pages/*.vue：按路由拆分的业务页面，路由懒加载。
