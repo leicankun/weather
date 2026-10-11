@@ -34,7 +34,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from app.core.config import settings
-from app.services import llm_client, multi_agent
+from app.services import checkpoint_service, llm_client, multi_agent
 from app.services.llm_client import get_llm
 from app.services.local_tools import get_local_tools
 from app.services.mcp_client import get_mcp_tools
@@ -156,6 +156,7 @@ _STRONG_INTENT_KEYWORDS: dict[str, tuple[str, ...]] = {
 class AgentState(TypedDict):
     """会话状态。messages 用 add_messages 做累加合并。"""
 
+    run_id: str
     messages: Annotated[list, add_messages]
     intent: str
     answer: str
@@ -266,11 +267,15 @@ async def _agent_node(state: AgentState) -> dict:
         resp = await llm_with_tools.ainvoke([("system", system), *messages])
     except Exception as exc:
         logger.exception("LLM 生成节点调用失败: %s", exc)
+        if checkpoint_service.current():
+            raise
         return {"error": str(exc)}
 
     result: dict = {"messages": [resp]}
     if not getattr(resp, "tool_calls", None):
         content = resp.content if isinstance(resp.content, str) else str(resp.content)
+        if checkpoint_service.current() and not content.strip():
+            raise ValueError("模型返回空回答，保留生成节点供恢复")
         result["answer"] = content
     return result
 
@@ -297,7 +302,7 @@ def _should_error(state: AgentState) -> str:
     return "error" if state.get("error") else "agent"
 
 
-async def _build_graph():
+async def _build_graph(checkpointer=None):
     """构建 LangGraph 状态机（含 MCP 工具 + 本地工具节点）。"""
     tools = await _get_all_tools()  # 预加载全部工具，供 ToolNode 使用
     graph = StateGraph(AgentState)
@@ -322,7 +327,7 @@ async def _build_graph():
     graph.add_edge("tools", "agent")
     graph.add_edge("handle_error", END)
 
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
 
 
 _agent_instance = None
@@ -369,7 +374,10 @@ def use_multi_agent() -> bool:
     默认 single：新架构上线第一步是"能一键回退"，
     出问题改一行配置即可退回旧路径，不必重新发版。
     """
-    return (settings.AGENT_MODE or "single").strip().lower() == "multi"
+    ctx = checkpoint_service.current()
+    return (
+        ctx.mode == "multi" if ctx else (settings.AGENT_MODE or "single").strip().lower() == "multi"
+    )
 
 
 async def chat(
@@ -403,10 +411,14 @@ async def chat(
     initial = _build_initial_state(user_input, history, memory_context)
     token = set_current_user_id(user_id)
     try:
-        ag = await _get_agent()
-        result = await ag.ainvoke(initial)
+        ag, initial, kwargs = await checkpoint_service.graph_and_input(
+            _build_graph, _get_agent, initial, ("messages",)
+        )
+        result = await checkpoint_service.invoke(ag, initial, kwargs)
         return {"intent": result.get("intent", ""), "answer": result.get("answer", "")}
     except Exception as exc:
+        if checkpoint_service.current():
+            raise
         logger.exception("对话异常: %s", exc)
         return {"intent": "other", "answer": "抱歉，AI 服务暂时不可用，请稍后重试。"}
     finally:
@@ -444,14 +456,16 @@ async def chat_stream(
     token = set_current_user_id(user_id)
     final_intent = "chat"
     try:
-        ag = await _get_agent()
+        ag, graph_input, kwargs = await checkpoint_service.graph_and_input(
+            _build_graph, _get_agent, initial, ("messages",)
+        )
         # 先跑一次意图识别（轻量，单次 LLM 调用），拿到 intent
         intent_state = await _classify_intent(initial)
         final_intent = intent_state.get("intent", "chat")
         yield {"type": "intent", "intent": final_intent}
         # 再流式生成：逐 token 推送，仅输出「agent 生成节点」的文本增量，
         # 跳过 classify_intent 节点的输出（其内容是意图标签，不应作为答案推送）
-        async for chunk in ag.astream(initial, stream_mode="messages"):
+        async for chunk in ag.astream(graph_input, stream_mode="messages", **kwargs):
             msg_chunk = chunk[0] if isinstance(chunk, tuple) else chunk
             meta = chunk[1] if isinstance(chunk, tuple) else {}
             if meta.get("langgraph_node") != "agent":
@@ -461,6 +475,8 @@ async def chat_stream(
                 if isinstance(piece, str) and piece:
                     yield {"type": "token", "content": piece}
     except Exception as exc:
+        if checkpoint_service.current():
+            raise
         logger.exception("流式对话异常: %s", exc)
         yield {"type": "token", "content": "抱歉，AI 服务暂时不可用，请稍后重试。"}
         final_intent = "other"

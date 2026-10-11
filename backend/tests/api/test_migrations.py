@@ -32,6 +32,11 @@ MISSING_TABLES = (
     "memory_episodes",
     "memory_states",
     "chat_summaries",
+    "agent_checkpoint_threads",
+    "checkpoint_migrations",
+    "checkpoints",
+    "checkpoint_blobs",
+    "checkpoint_writes",
 )
 
 
@@ -203,5 +208,49 @@ async def test_upgrade_preserves_tables_previously_created_by_orm(migration_data
             saved = await session.scalar(select(UserKnowledge))
             assert saved.title == "已有资料"
             assert saved.content == "保留原内容"
+    finally:
+        await engine.dispose()
+
+
+async def test_migrated_schema_supports_official_checkpoint_resume(migration_database, monkeypatch):
+    from langchain_core.messages import AIMessage
+
+    from app.core.config import settings
+    from app.services import agent, checkpoint_service
+
+    await _upgrade(migration_database)
+    engine = create_async_engine(migration_database, poolclass=NullPool)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(settings, "CHECKPOINT_ENABLED", True)
+    monkeypatch.setattr(settings, "AGENT_MODE", "single")
+    monkeypatch.setattr(
+        settings, "DB_URL", migration_database.render_as_string(hide_password=False)
+    )
+    monkeypatch.setattr(checkpoint_service, "AsyncSessionLocal", sessions)
+
+    async def tools():
+        return []
+
+    async def classify(state):
+        return {"intent": "other"}
+
+    async def answer(state):
+        return {"messages": [AIMessage(content="migration answer")], "answer": "migration answer"}
+
+    monkeypatch.setattr(agent, "_get_all_tools", tools)
+    monkeypatch.setattr(agent, "_classify_intent", classify)
+    monkeypatch.setattr(agent, "_agent_node", answer)
+    try:
+        async with sessions() as db:
+            user = User(username="checkpoint_migration", password_hash="unused")
+            db.add(user)
+            await db.commit()
+        async with checkpoint_service.open_thread(user.id, "migration", "single"):
+            assert (await agent.chat("hello", user_id=user.id))["answer"] == "migration answer"
+            await checkpoint_service.save_turn("hello", "migration answer")
+        async with checkpoint_service.open_thread(user.id, "migration", "single", resume=True):
+            assert (await agent.chat("", user_id=user.id))["answer"] == "migration answer"
+        async with sessions() as db:
+            assert await db.scalar(text("SELECT count(*) FROM checkpoint_migrations")) == 10
     finally:
         await engine.dispose()

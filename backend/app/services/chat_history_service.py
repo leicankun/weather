@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import AsyncSessionLocal
 from app.models.chat_message import ChatMessage
 from app.models.chat_summary import ChatSummary
+from app.services import checkpoint_service
 
 # 拼进多轮上下文的历史条数（取最近 N 条消息，超出截断）
 HISTORY_LIMIT = 10
@@ -216,16 +217,19 @@ async def delete_conversation(
     user_id: int,
     conversation_id: str,
     db: AsyncSession | None = None,
-) -> int:
-    """删除整个会话，返回删除的消息条数。"""
+    *,
+    include_checkpoints: bool = False,
+) -> int | dict[str, int]:
+    """删除整个会话；默认返回消息数，API 可同时返回检查点线程数。"""
     if user_id is None:
         return 0
 
     owns_db = db is None
     session = db or AsyncSessionLocal()
 
-    async def _run(s: AsyncSession) -> int:
+    async def _run(s: AsyncSession) -> int | dict[str, int]:
         await lock_conversation(s, user_id, conversation_id)
+        removed_threads = await checkpoint_service.delete_threads(s, user_id, conversation_id)
         await s.execute(
             delete(ChatSummary).where(
                 ChatSummary.user_id == user_id,
@@ -239,9 +243,15 @@ async def delete_conversation(
             )
         )
         await s.commit()
-        return result.rowcount or 0
+        count = result.rowcount or 0
+        return (
+            {"deleted": count, "deleted_checkpoints": removed_threads}
+            if include_checkpoints
+            else count
+        )
 
-    if owns_db:
-        async with session as s:
-            return await _run(s)
-    return await _run(session)
+    async with checkpoint_service.conversation_lock(user_id, conversation_id):
+        if owns_db:
+            async with session as s:
+                return await _run(s)
+        return await _run(session)

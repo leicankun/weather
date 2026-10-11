@@ -27,6 +27,6 @@ AI 对话 → agent.py（single）或 multi_agent.py（multi）→ LangChain 模
 
 登录用户新增两层长期记忆：JSONB 偏好/事实卡片每轮有限注入；需要回忆时，从独立历史库以 BM25 + 向量 + RRF + reranker 检索。单/多智能体在入口共用读取与写入，SSE done 在写入完成或超时降级后发出；原始一轮消息在同一事务保存。按用户隔离、来源外键级联删除与清空水位避免旧记忆复活，详见 [MEMORY.md](MEMORY.md)。
 
-聊天消息和短期摘要存在 PostgreSQL，并不等于 LangGraph checkpoint 持久化。摘要限当前会话，不升级为跨会话长期卡片；图片对话仍走独立视觉路径，可注入两层长期记忆背景，但尚未把短期历史作为多模态消息接入。天气共享快照和逐小时自动重规划仍属于后续增强方向。
+登录文字对话的单/多 Agent 图接入官方 PostgreSQL Checkpointer，按用户、会话、模式隔离，保存节点边界状态与 pending writes，支持恢复和幂等补存消息。新任务继续读取摘要与双层记忆，并刷新消息/领域结果/指标等 reducer。并发、恢复和删除由跨进程锁保护，删除会话或用户级联清理快照。实现与范围见 [CHECKPOINT_MEMORY.md](CHECKPOINT_MEMORY.md)。图片仍走独立视觉路径，不产生图快照。天气共享快照和逐小时自动重规划仍属于后续增强方向。
 
 部署采用 docker-compose.yml；migrate 服务先执行 Alembic，API / Celery 等待迁移成功。开发代理统一到 8000，用户端 5173，管理端 5174。

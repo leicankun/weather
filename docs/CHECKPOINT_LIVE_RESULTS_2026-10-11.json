@@ -1,0 +1,159 @@
+{
+  "started_at": "2026-10-11T06:35:04.353195+00:00",
+  "models": {
+    "llm_provider": "deepseek",
+    "embedding": "embedding-3",
+    "dimensions": 1024,
+    "reranker": "gte-rerank-v2"
+  },
+  "scope": "Real models and PostgreSQL via ASGI API; saver/graph recreated, no forced process kill",
+  "cases": [
+    {
+      "mode": "single",
+      "question": "我长期住在天河区，我不吃辣。请简短确认。",
+      "stream": false,
+      "answer": "好的，已记住：你长期住在天河区，不吃辣。需要推荐天河附近的清淡餐厅或出行建议，随时问我。",
+      "http_status": 200,
+      "completed": true,
+      "seconds": 10.26
+    },
+    {
+      "mode": "single",
+      "question": "我之前那次活动的集合暗号是什么？顺便提醒我的饮食偏好。",
+      "stream": false,
+      "answer": "你之前活动的集合暗号是「青鹭5816」；你的饮食偏好是不吃辣。",
+      "http_status": 200,
+      "completed": true,
+      "seconds": 13.92
+    },
+    {
+      "mode": "single",
+      "question": "再简短说一遍刚才提到的饮食偏好和暗号。",
+      "stream": true,
+      "answer": "饮食偏好：不吃辣；集合暗号：青鹭5816。",
+      "http_status": 200,
+      "completed": true,
+      "seconds": 5.61
+    },
+    {
+      "mode": "single",
+      "question": "我住哪个区？请只用已有信息回答。",
+      "stream": false,
+      "answer": "你长期住在天河区。",
+      "http_status": 200,
+      "completed": true,
+      "seconds": 5.66
+    },
+    {
+      "mode": "multi",
+      "question": "我长期住在天河区，我不吃辣。请简短确认。",
+      "stream": false,
+      "answer": "好的，已记住：你长期住在天河区，不吃辣。",
+      "http_status": 200,
+      "completed": true,
+      "seconds": 6.19
+    },
+    {
+      "mode": "multi",
+      "question": "我之前那次活动的集合暗号是什么？顺便提醒我的饮食偏好。",
+      "stream": false,
+      "answer": "你那次活动的集合暗号是「紫鸢9632」。饮食偏好：你不吃辣。",
+      "http_status": 200,
+      "completed": true,
+      "seconds": 17.85
+    },
+    {
+      "mode": "multi",
+      "question": "再简短说一遍刚才提到的饮食偏好和暗号。",
+      "stream": true,
+      "answer": "饮食偏好：不吃辣。集合暗号：紫鸢9632。",
+      "http_status": 200,
+      "completed": true,
+      "seconds": 3.69
+    },
+    {
+      "mode": "multi",
+      "question": "我住哪个区？请只用已有信息回答。",
+      "stream": false,
+      "answer": "天河区。",
+      "http_status": 200,
+      "completed": true,
+      "seconds": 5.69
+    }
+  ],
+  "checks": [
+    {
+      "mode": "single",
+      "check": "cards and historical RAG in saved state",
+      "passed": true
+    },
+    {
+      "mode": "single",
+      "check": "secret recalled from history, not extracted into card",
+      "passed": true
+    },
+    {
+      "mode": "single",
+      "check": "fresh graph/saver restores completed state",
+      "passed": true
+    },
+    {
+      "mode": "single",
+      "check": "fresh graph/saver restores completed state",
+      "passed": true
+    },
+    {
+      "mode": "single",
+      "check": "repeated resume does not duplicate messages",
+      "passed": true
+    },
+    {
+      "mode": "single",
+      "check": "snapshot status saved",
+      "passed": true
+    },
+    {
+      "mode": "single",
+      "check": "delete conversation cleans thread",
+      "passed": true
+    },
+    {
+      "mode": "multi",
+      "check": "cards and historical RAG in saved state",
+      "passed": true
+    },
+    {
+      "mode": "multi",
+      "check": "secret recalled from history, not extracted into card",
+      "passed": true
+    },
+    {
+      "mode": "multi",
+      "check": "fresh graph/saver restores completed state",
+      "passed": true
+    },
+    {
+      "mode": "multi",
+      "check": "fresh graph/saver restores completed state",
+      "passed": true
+    },
+    {
+      "mode": "multi",
+      "check": "repeated resume does not duplicate messages",
+      "passed": true
+    },
+    {
+      "mode": "multi",
+      "check": "snapshot status saved",
+      "passed": true
+    },
+    {
+      "mode": "multi",
+      "check": "delete conversation cleans thread",
+      "passed": true
+    }
+  ],
+  "cleanup_passed": true,
+  "finished_at": "2026-10-11T06:36:14.205750+00:00",
+  "passed": true
+}

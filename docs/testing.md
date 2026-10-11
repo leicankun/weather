@@ -1,5 +1,7 @@
 # 测试
 
+Checkpointer 回归：`python -m pytest tests/api/test_checkpoints.py tests/api/test_migrations.py -o addopts= -q`。使用真实 PostgreSQL、官方 saver 与完整单/多 Agent 图，模型替身覆盖节点中断、并行 pending writes、恢复幂等、摘要/卡片/历史 RAG 兼容、用户会话模式隔离、并发与级联删除。真实模型验收：`python -m app.scripts.verify_checkpoint_memory --output ../docs/CHECKPOINT_LIVE_RESULTS_2026-10-11.json`，会调用配置的付费模型，以临时合成账号测试并清理；已有报告拒绝覆盖。架构和恢复 API 见 [CHECKPOINT_MEMORY.md](CHECKPOINT_MEMORY.md)，结果见 [验证记录](CHECKPOINT_VALIDATION_2026-10-11.md)。
+
 前端：`npm --prefix frontend-user run lint`、`npm test`、`npm run build`。根目录 `npm run check:js` 检查两端没有 TS 源文件。
 
 浏览器：`npm run test:e2e`。首次安装 Chromium：在 frontend-user 执行 `npx playwright install chromium`。可在 PowerShell 设置 `$env:PLAYWRIGHT_CHANNEL = 'chrome'` 使用现有 Chrome。

@@ -42,6 +42,7 @@ from langchain_core.messages import (
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
+from app.services import checkpoint_service
 from app.services.agent_metrics import agent_metrics
 from app.services.agent_registry import DOMAINS, route_domains
 from app.services.answer_verification import (
@@ -142,6 +143,7 @@ def _merge_metrics(left: dict | None, right: dict | None) -> dict:
 class MultiAgentState(TypedDict):
     """多智能体图的状态。"""
 
+    run_id: str
     question: str
     memory_context: str
     history: list[dict[str, str]]
@@ -246,7 +248,9 @@ async def run_domain_agent(
         run.llm_calls += 1
         try:
             resp = await bound.ainvoke(messages)
-        except Exception as exc:  # noqa: BLE001 保留此前已获得的工具证据
+        except Exception as exc:
+            if checkpoint_service.current():
+                raise
             logger.warning("领域模型执行失败 key=%s: %s", key, type(exc).__name__)
             run.answer = f"（{domain.label}部分暂时查询失败）"
             return run
@@ -397,6 +401,8 @@ def _make_domain_node(key: str):
                 memory_context=state.get("memory_context", ""),
             )
         except Exception as exc:
+            if checkpoint_service.current():
+                raise
             logger.exception("领域 Agent 执行失败 key=%s: %s", key, exc)
             return {
                 "domain_answers": {key: f"（{DOMAINS[key].label}部分暂时查询失败）"},
@@ -430,6 +436,8 @@ async def _general_node(state: MultiAgentState) -> dict:
         )
     )
     content = resp.content if isinstance(resp.content, str) else str(resp.content)
+    if checkpoint_service.current() and not content.strip():
+        raise ValueError("模型返回空回答，保留通用节点供恢复")
     return {"answer": content.strip(), "metrics": _usage_of(resp)}
 
 
@@ -574,9 +582,11 @@ async def chat_multi_stream(
     prompt_tokens = completion_tokens = 0
 
     try:
-        ag = await _get_graph()
+        ag, initial, kwargs = await checkpoint_service.graph_and_input(
+            _build_graph, _get_graph, initial, ("domain_answers", "domain_evidence", "metrics")
+        )
         emitted = False
-        async for mode, chunk in ag.astream(initial, stream_mode=["messages", "updates"]):
+        async for mode, chunk in ag.astream(initial, stream_mode=["messages", "updates"], **kwargs):
             if mode == "updates":
                 final = chunk.get(source) or {}
                 if final.get("answer") and (source == "verify" or not emitted):
@@ -598,6 +608,8 @@ async def chat_multi_stream(
                     yield {"type": "token", "content": piece}
                     emitted = True
     except Exception as exc:
+        if checkpoint_service.current():
+            raise
         logger.exception("多智能体流式对话异常: %s", exc)
         yield {"type": "token", "content": "抱歉，AI 服务暂时不可用，请稍后重试。"}
     finally:
@@ -622,7 +634,7 @@ async def chat_multi_stream(
 _graph = None
 
 
-async def _build_graph():
+async def _build_graph(checkpointer=None):
     """构建 Supervisor 图。
 
     条件边传「可能的目标节点列表」是 LangGraph 的扇出写法：
@@ -648,7 +660,7 @@ async def _build_graph():
     graph.add_edge("synthesize", "verify")
     graph.add_edge("verify", END)
 
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
 
 
 async def _get_graph():
@@ -710,8 +722,10 @@ async def chat_multi(
     started = time.perf_counter()
 
     try:
-        ag = await _get_graph()
-        result = await ag.ainvoke(initial)
+        ag, initial, kwargs = await checkpoint_service.graph_and_input(
+            _build_graph, _get_graph, initial, ("domain_answers", "domain_evidence", "metrics")
+        )
+        result = await checkpoint_service.invoke(ag, initial, kwargs)
         answers = result.get("domain_answers") or {}
         answer = result.get("answer") or fallback_merge(answers)
         domains = list(result.get("domains") or [])
@@ -741,6 +755,8 @@ async def chat_multi(
             "verification": result.get("verification") or {},
         }
     except Exception as exc:
+        if checkpoint_service.current():
+            raise
         logger.exception("多智能体执行失败: %s", exc)
         agent_metrics.observe(
             "multi", duration_ms=(time.perf_counter() - started) * 1000, error=True

@@ -96,4 +96,8 @@ flowchart TD
 
 主要入口：`app/services/memory_service.py`。模型和迁移分别在 `app/models/memory.py`、`alembic/versions/0016_chat_memory.py`；接入点在 `app/routers/chat.py`、`app/services/agent.py`、`app/services/multi_agent.py`。
 
+## 与 Checkpointer 配合
+
+单/多 Agent 的登录文字对话同时接入 PostgreSQL Checkpointer。双层记忆负责跨会话偏好和历史召回，Checkpointer 负责图状态与执行恢复，短期摘要继续控制本会话历史。新任务刷新背景并覆盖 reducer 字段，避免重复注入历史或沿用旧领域结果。配置、恢复/清除接口与节点恢复边界见 [CHECKPOINT_MEMORY.md](CHECKPOINT_MEMORY.md)。
+
 自动回归使用真实数据库和模型替身；真实模型验收脚本 `python -m app.scripts.verify_memory` 会调用已配置的外部 API，创建只含合成信息的临时账号，完成后删除这些账号及记忆，并保存验证记录。

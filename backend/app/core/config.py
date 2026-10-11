@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # 出问题改一行配置就能退回旧路径，不用重新发版。
     AGENT_MODE: str = "single"
 
+    # 登录文本会话的图状态持久化；必须先运行 Alembic 到 0018。
+    CHECKPOINT_ENABLED: bool = True
+
     # 短期会话摘要：每五轮检查，只在历史字符预算超限时压缩，最近五轮保留原文。
     CHAT_SUMMARY_ENABLED: bool = True
     CHAT_SUMMARY_TRIGGER_CHARS: int = Field(default=6000, ge=500, le=100000)

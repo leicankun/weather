@@ -3,12 +3,13 @@
 import asyncio
 import json
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
+from app.core.config import settings
 from app.core.deps import CurrentUser, OptionalUser
 from app.core.response import success
 from app.db.session import get_db
@@ -18,6 +19,7 @@ from app.services import (
     attachment_service,
     chat_history_service,
     chat_summary_service,
+    checkpoint_service,
     memory_service,
 )
 
@@ -27,9 +29,15 @@ router = APIRouter(prefix="/api/v1/chat", tags=["AI 对话"])
 async def _save_turn(user_id, conversation_id, stored_message, answer, typed_message):
     if user_id is None or not answer:
         return
-    user_message_id, assistant_message_id = await chat_history_service.add_turn(
-        user_id, conversation_id, stored_message, answer
-    )
+    if checkpoint_service.current():
+        saved = await checkpoint_service.save_turn(stored_message, answer)
+        if saved is None:
+            return
+        user_message_id, assistant_message_id = saved
+    else:
+        user_message_id, assistant_message_id = await chat_history_service.add_turn(
+            user_id, conversation_id, stored_message, answer
+        )
     await asyncio.gather(
         memory_service.remember_turn(user_id, user_message_id, assistant_message_id, typed_message),
         chat_summary_service.check_and_compress(user_id, conversation_id, assistant_message_id),
@@ -155,21 +163,34 @@ async def chat(body: ChatRequest, current: OptionalUser = None) -> dict:
     # 用户偏好注入（Day 55）：登录用户才生效，读取失败不拦对话
     prompt = await _with_preferences(prompt, user_id)
 
-    # 读取历史（仅登录用户），构造多轮上下文
-    history = await chat_summary_service.get_context(user_id, conversation_id)
-
-    memory_context = await memory_service.prepare_context(user_id, conversation_id, body.message)
-    memory_kwargs = {"memory_context": memory_context} if memory_context else {}
-
-    # 带图片时走视觉模型（不调工具，原因见 agent.chat_stream_with_images）
-    result = (
-        await agent.chat_with_images(prompt, images, history=history, **memory_kwargs)
-        if images
-        else await agent.chat(prompt, user_id=user_id, history=history, **memory_kwargs)
-    )
-
-    # 持久化本轮对话（登录用户）
-    await _save_turn(user_id, conversation_id, stored_message, result["answer"], body.message)
+    mode = "multi" if agent.use_multi_agent() else "single"
+    try:
+        async with checkpoint_service.open_thread(
+            user_id,
+            conversation_id,
+            mode,
+            enabled=not images,
+            request={"stored_message": stored_message, "typed_message": body.message},
+        ):
+            history = await chat_summary_service.get_context(user_id, conversation_id)
+            memory_context = await memory_service.prepare_context(
+                user_id, conversation_id, body.message
+            )
+            memory_kwargs = {"memory_context": memory_context} if memory_context else {}
+            result = (
+                await agent.chat_with_images(prompt, images, history=history, **memory_kwargs)
+                if images
+                else await agent.chat(prompt, user_id=user_id, history=history, **memory_kwargs)
+            )
+            await _save_turn(
+                user_id, conversation_id, stored_message, result["answer"], body.message
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        if settings.CHECKPOINT_ENABLED and user_id is not None:
+            raise HTTPException(503, "对话未完成，请恢复检查点或稍后重试") from exc
+        raise
 
     data = ChatResponse(**result).model_dump()
     data["conversation_id"] = conversation_id
@@ -192,29 +213,59 @@ async def chat_stream(body: ChatRequest, current: OptionalUser = None):
     prompt, images, stored_message = await _prepare_input(body)
     # 用户偏好注入（Day 55）：登录用户才生效，读取失败不拦对话
     prompt = await _with_preferences(prompt, user_id)
-    history = await chat_summary_service.get_context(user_id, conversation_id)
-
-    memory_context = await memory_service.prepare_context(user_id, conversation_id, body.message)
-    memory_kwargs = {"memory_context": memory_context} if memory_context else {}
+    mode = "multi" if agent.use_multi_agent() else "single"
 
     async def event_generator():
         full_answer = ""
         done_event = {"type": "done", "conversation_id": conversation_id}
         try:
-            stream = (
-                agent.chat_stream_with_images(prompt, images, history=history, **memory_kwargs)
-                if images
-                else agent.chat_stream(prompt, user_id=user_id, history=history, **memory_kwargs)
-            )
-            async for evt in stream:
-                etype = evt.get("type")
-                if etype == "token":
-                    full_answer += evt.get("content", "")
-                if etype == "done":
-                    done_event.update(evt)
-                    continue
-                yield {"event": "message", "data": json.dumps(evt, ensure_ascii=False)}
-        except Exception:  # noqa: BLE001
+            async with checkpoint_service.open_thread(
+                user_id,
+                conversation_id,
+                mode,
+                enabled=not images,
+                request={"stored_message": stored_message, "typed_message": body.message},
+            ) as ctx:
+                history = await chat_summary_service.get_context(user_id, conversation_id)
+                memory_context = await memory_service.prepare_context(
+                    user_id, conversation_id, body.message
+                )
+                memory_kwargs = {"memory_context": memory_context} if memory_context else {}
+                stream = (
+                    agent.chat_stream_with_images(prompt, images, history=history, **memory_kwargs)
+                    if images
+                    else agent.chat_stream(
+                        prompt, user_id=user_id, history=history, **memory_kwargs
+                    )
+                )
+                async for evt in stream:
+                    etype = evt.get("type")
+                    if etype == "token":
+                        full_answer += evt.get("content", "")
+                    if etype == "done":
+                        done_event.update(evt)
+                        continue
+                    yield {"event": "message", "data": json.dumps(evt, ensure_ascii=False)}
+                if ctx:
+                    snapshot = await ctx.saver.aget_tuple(ctx.config)
+                    full_answer = snapshot.checkpoint["channel_values"].get("answer", full_answer)
+                await _save_turn(
+                    user_id, conversation_id, stored_message, full_answer, body.message
+                )
+        except Exception as exc:  # noqa: BLE001
+            if settings.CHECKPOINT_ENABLED and user_id is not None:
+                yield {
+                    "event": "message",
+                    "data": json.dumps(
+                        {
+                            "type": "error",
+                            "message": getattr(exc, "detail", "对话中断，请恢复检查点"),
+                            "conversation_id": conversation_id,
+                        },
+                        ensure_ascii=False,
+                    ),
+                }
+                return
             full_answer += "抱歉，AI 服务暂时不可用，请稍后重试。"
             yield {
                 "event": "message",
@@ -223,13 +274,55 @@ async def chat_stream(body: ChatRequest, current: OptionalUser = None):
                     ensure_ascii=False,
                 ),
             }
-        finally:
-            # 流式结束后持久化（登录用户）
             await _save_turn(user_id, conversation_id, stored_message, full_answer, body.message)
         # done 在原始对话及记忆处理结束后发出，紧接下一轮即可读取。
         yield {"event": "message", "data": json.dumps(done_event, ensure_ascii=False)}
 
     return EventSourceResponse(event_generator())
+
+
+@router.get("/conversations/{conversation_id}/checkpoint", response_model=dict)
+async def get_checkpoint(
+    conversation_id: str,
+    current: CurrentUser,
+    mode: Literal["single", "multi"] = "single",
+) -> dict:
+    return success(await checkpoint_service.describe(current.id, conversation_id, mode))
+
+
+@router.delete("/conversations/{conversation_id}/checkpoint", response_model=dict)
+async def reset_checkpoint(
+    conversation_id: str,
+    current: CurrentUser,
+    mode: Literal["single", "multi"] = "single",
+) -> dict:
+    deleted = await checkpoint_service.reset(current.id, conversation_id, mode)
+    return success({"deleted": deleted}, message="图状态已清除，对话与长期记忆保留")
+
+
+@router.post("/conversations/{conversation_id}/resume", response_model=dict)
+async def resume_conversation(
+    conversation_id: str,
+    current: CurrentUser,
+    mode: Literal["single", "multi"] = "single",
+) -> dict:
+    try:
+        async with checkpoint_service.open_thread(
+            current.id, conversation_id, mode, resume=True
+        ) as ctx:
+            result = await agent.chat("", user_id=current.id)
+            await _save_turn(
+                current.id,
+                conversation_id,
+                ctx.request["stored_message"],
+                result["answer"],
+                ctx.request["typed_message"],
+            )
+            return success({**result, "conversation_id": conversation_id}, message="对话已恢复")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(503, "恢复暂未成功，检查点已保留") from exc
 
 
 @router.get("/conversations", response_model=dict)
@@ -264,7 +357,9 @@ async def delete_conversation(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     """删除某个历史会话。"""
-    deleted = await chat_history_service.delete_conversation(current.id, conversation_id, db=db)
-    if deleted == 0:
+    deleted = await chat_history_service.delete_conversation(
+        current.id, conversation_id, db=db, include_checkpoints=True
+    )
+    if not any(deleted.values()):
         raise HTTPException(status_code=404, detail="会话不存在")
-    return success({"deleted": deleted}, message="会话已删除")
+    return success(deleted, message="会话已删除")
