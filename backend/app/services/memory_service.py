@@ -262,20 +262,31 @@ async def search_history(
 
 async def clear_memory(user_id: int) -> None:
     async with AsyncSessionLocal() as db:
-        await _lock(db, user_id)
+        await clear_in_transaction(db, user_id)
+        await db.commit()
+
+
+async def clear_in_transaction(
+    db, user_id: int, *, forget_before_id: int | None = None
+) -> dict[str, int]:
+    """Caller commits; approval receipt and deletion can share one transaction."""
+    await _lock(db, user_id)
+    latest = forget_before_id
+    if latest is None:
         latest = (
             await db.scalar(select(func.max(ChatMessage.id)).where(ChatMessage.user_id == user_id))
             or 0
         )
-        stmt = insert(MemoryState).values(user_id=user_id, forget_before_id=latest)
-        await db.execute(
-            stmt.on_conflict_do_update(
-                index_elements=[MemoryState.user_id], set_={"forget_before_id": latest}
-            )
+    stmt = insert(MemoryState).values(user_id=user_id, forget_before_id=latest)
+    await db.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[MemoryState.user_id],
+            set_={"forget_before_id": func.greatest(MemoryState.forget_before_id, latest)},
         )
-        await db.execute(delete(MemoryCard).where(MemoryCard.user_id == user_id))
-        await db.execute(delete(MemoryEpisode).where(MemoryEpisode.user_id == user_id))
-        await db.commit()
+    )
+    cards = await db.execute(delete(MemoryCard).where(MemoryCard.user_id == user_id))
+    episodes = await db.execute(delete(MemoryEpisode).where(MemoryEpisode.user_id == user_id))
+    return {"cards": cards.rowcount or 0, "history_chunks": episodes.rowcount or 0}
 
 
 async def _safe(label: str, operation):

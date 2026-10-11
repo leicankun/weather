@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import AsyncSessionLocal
 from app.models.chat_message import ChatMessage
 from app.models.chat_summary import ChatSummary
+from app.models.checkpoint import AgentCheckpointThread
 from app.services import checkpoint_service
 
 # 拼进多轮上下文的历史条数（取最近 N 条消息，超出截断）
@@ -162,6 +163,27 @@ async def list_conversations(
                 # 倒序遍历中最后赋值的是最早的用户提问 → 用它当标题
                 g["title"] = r.content[:40].replace("\n", " ")
 
+        pending = await s.scalars(
+            select(AgentCheckpointThread)
+            .where(
+                AgentCheckpointThread.user_id == user_id,
+                AgentCheckpointThread.assistant_message_id.is_(None),
+            )
+            .order_by(AgentCheckpointThread.updated_at.desc())
+            .limit(limit)
+        )
+        for thread in pending:
+            group = groups.setdefault(
+                thread.conversation_id,
+                {
+                    "conversation_id": thread.conversation_id,
+                    "count": 0,
+                    "title": thread.request.get("stored_message", "未完成对话")[:40],
+                    "last_at": thread.updated_at,
+                },
+            )
+            group["pending"] = True
+            group["mode"] = thread.mode
         items = sorted(groups.values(), key=lambda x: x["last_at"], reverse=True)
         for it in items:
             it["last_at"] = it["last_at"].isoformat() if it["last_at"] else None
@@ -228,30 +250,31 @@ async def delete_conversation(
     session = db or AsyncSessionLocal()
 
     async def _run(s: AsyncSession) -> int | dict[str, int]:
-        await lock_conversation(s, user_id, conversation_id)
-        removed_threads = await checkpoint_service.delete_threads(s, user_id, conversation_id)
-        await s.execute(
-            delete(ChatSummary).where(
-                ChatSummary.user_id == user_id,
-                ChatSummary.conversation_id == conversation_id,
-            )
-        )
-        result = await s.execute(
-            delete(ChatMessage).where(
-                ChatMessage.user_id == user_id,
-                ChatMessage.conversation_id == conversation_id,
-            )
-        )
+        counts = await delete_in_transaction(s, user_id, conversation_id)
         await s.commit()
-        count = result.rowcount or 0
-        return (
-            {"deleted": count, "deleted_checkpoints": removed_threads}
-            if include_checkpoints
-            else count
-        )
+        return counts if include_checkpoints else counts["deleted"]
 
     async with checkpoint_service.conversation_lock(user_id, conversation_id):
         if owns_db:
             async with session as s:
                 return await _run(s)
         return await _run(session)
+
+
+async def delete_in_transaction(db, user_id: int, conversation_id: str) -> dict[str, int]:
+    """Caller holds the cross-process guard and commits data + approval receipt."""
+    await lock_conversation(db, user_id, conversation_id)
+    removed_threads = await checkpoint_service.delete_threads(db, user_id, conversation_id)
+    await db.execute(
+        delete(ChatSummary).where(
+            ChatSummary.user_id == user_id,
+            ChatSummary.conversation_id == conversation_id,
+        )
+    )
+    result = await db.execute(
+        delete(ChatMessage).where(
+            ChatMessage.user_id == user_id,
+            ChatMessage.conversation_id == conversation_id,
+        )
+    )
+    return {"deleted": result.rowcount or 0, "deleted_checkpoints": removed_threads}

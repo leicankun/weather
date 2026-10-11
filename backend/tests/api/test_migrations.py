@@ -37,6 +37,7 @@ MISSING_TABLES = (
     "checkpoints",
     "checkpoint_blobs",
     "checkpoint_writes",
+    "agent_approvals",
 )
 
 

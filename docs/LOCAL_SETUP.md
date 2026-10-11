@@ -107,4 +107,5 @@ cd backend
 - 聊天支持 SSE、停止生成、历史对话、附件和浏览器录音；附件解析能力取决于服务端可选依赖与模型配置。
 - 提供天气、路线/穿搭、AI 行程、行程 CRUD/日历导出/海报、笔记、知识库、资讯、通知和个人偏好页面。
 - 后端单/多 Agent 文本对话同时支持 PG Checkpointer 与双层长期记忆；安装最新 requirements 并执行 `alembic upgrade head` 后重启后端。配置和恢复接口见 [CHECKPOINT_MEMORY.md](CHECKPOINT_MEMORY.md)。逐小时自动重规划仍未实现。
+- Agent 删除本人旧会话/清空长期记忆已接入人工审批：页面展示范围后暂停，批准或拒绝才继续。迁移到 `0019_agent_approvals` 并重启后端/前端；操作方法见 [AGENT_APPROVAL.md](AGENT_APPROVAL.md)。
 - 旧 React 组件测试由 Vue 相关测试替换；历史文档和博客仍记录上游原版本，当前启动方式以本文为准。

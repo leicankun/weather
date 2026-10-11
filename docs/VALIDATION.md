@@ -1,5 +1,9 @@
 # 重构验证记录
 
+## 2026-10-11：Agent 原生中断与人工审批
+
+单/多图新增共用管理分支，Agent 提案经服务端冻结对象和范围后，以 `interrupt()` 暂停并释放请求；页面批准/拒绝后通过 `Command` 恢复，重新校验并原子执行与保存回执。当前支持本人指定旧会话删除、本人长期卡片/历史 RAG 清空。审批与 Checkpointer 的 41 项数据库回归通过；前端 lint/18 项单元/两端构建、11 项 Chrome 浏览器测试通过。真实配置模型/API 验收、完整后端结果与已有失败详见 [AGENT_APPROVAL_VALIDATION_2026-10-11.md](AGENT_APPROVAL_VALIDATION_2026-10-11.md)。流程与边界见 [AGENT_APPROVAL.md](AGENT_APPROVAL.md)。
+
 ## 2026-10-11：ATX 标题硬边界与段／句软边界分块
 
 公共/个人文档共用的切分器已按标题隔离 chunk 和 overlap，使用默认 300 字符窗口按段／句回退，只有超长单元素硬切；重叠最多 50 字符并保持短元素完整。最终专项 50 项通过，包含真实 PostgreSQL 的公共入库和个人上传/检索/删除。真实智谱 Embedding 与百炼 rerank 通过，合成文档 7 块，临时账号和知识块清理完成；本地公共资料只扫描，16 篇产生 106 块，未自动重建已有向量。全量回归、原有通知失败和原有格式问题详见 [CHUNKING_VALIDATION_2026-10-11.md](CHUNKING_VALIDATION_2026-10-11.md)，规则和旧索引更新见 [CHUNKING.md](CHUNKING.md)。

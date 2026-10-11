@@ -60,3 +60,14 @@ export async function getConversationMessages(id) {
 export async function deleteConversation(id) {
   return http.delete(`/chat/conversations/${id}`)
 }
+export async function getApprovals(id) {
+  const res = await http.get(`/chat/conversations/${encodeURIComponent(id)}/approvals`)
+  return res?.items ?? []
+}
+export async function decideApproval(id, approval, approved) {
+  return http.post(
+    `/chat/conversations/${encodeURIComponent(id)}/approval`,
+    { approval_id: approval.approval_id, approved },
+    { params: { mode: approval.mode }, timeout: 120000 },
+  )
+}

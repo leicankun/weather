@@ -190,7 +190,13 @@ async def graph_and_input(builder, cached_getter, initial: dict, reducer_keys: t
         return graph, None, {"config": ctx.config, "durability": "sync"}
     # Refresh bounded short-term context + cards/RAG. Keep prior snapshots in storage,
     # but replace reducer fields so tool messages/domain results do not accumulate.
-    initial = {**initial, "run_id": ctx.request["run_id"]}
+    initial = {
+        **initial,
+        "run_id": ctx.request["run_id"],
+        "approval_id": "",
+        "action_approved": False,
+        "action_result": {},
+    }
     for key in reducer_keys:
         initial[key] = Overwrite(initial[key])
     return graph, initial, {"config": ctx.config, "durability": "sync"}
@@ -200,6 +206,13 @@ async def invoke(graph, initial, kwargs):
     ctx = current()
     if ctx and ctx.resume:
         snapshot = await graph.aget_state(ctx.config)
+        from app.services import approval_service
+
+        resumed = await approval_service.resume_input(snapshot)
+        if isinstance(resumed, dict) and resumed.get("waiting"):
+            return {**snapshot.values, "__interrupt__": resumed["interrupts"]}
+        if resumed is not None:
+            return await graph.ainvoke(resumed, **kwargs)
         if not snapshot.next:
             return snapshot.values
     return await graph.ainvoke(initial, **kwargs)
@@ -263,13 +276,25 @@ async def describe(user_id: int, conversation_id: str, mode: Mode) -> dict:
             return {
                 "conversation_id": conversation_id,
                 "mode": mode,
-                "status": "saved" if row.assistant_message_id else "unfinished",
+                "status": "saved"
+                if row.assistant_message_id
+                else (
+                    "waiting_approval"
+                    if any(
+                        channel == "__interrupt__"
+                        for _, channel, _ in (latest.pending_writes or [])
+                    )
+                    else "unfinished"
+                ),
                 "snapshots": history,
             }
 
 
 async def reset(user_id: int, conversation_id: str, mode: Mode) -> int:
     async with conversation_lock(user_id, conversation_id), AsyncSessionLocal() as db:
+        from app.services import approval_service
+
+        await approval_service.cancel_for_threads(db, [thread_id(user_id, conversation_id, mode)])
         result = await db.execute(
             delete(AgentCheckpointThread).where(
                 AgentCheckpointThread.user_id == user_id,
@@ -282,6 +307,17 @@ async def reset(user_id: int, conversation_id: str, mode: Mode) -> int:
 
 
 async def delete_threads(db, user_id: int, conversation_id: str) -> int:
+    from app.services import approval_service
+
+    identifiers = list(
+        await db.scalars(
+            select(AgentCheckpointThread.thread_id).where(
+                AgentCheckpointThread.user_id == user_id,
+                AgentCheckpointThread.conversation_id == conversation_id,
+            )
+        )
+    )
+    await approval_service.cancel_for_threads(db, identifiers)
     result = await db.execute(
         delete(AgentCheckpointThread).where(
             AgentCheckpointThread.user_id == user_id,

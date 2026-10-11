@@ -8,6 +8,8 @@ import {
   getConversationMessages,
   deleteConversation,
   uploadAttachment,
+  getApprovals,
+  decideApproval,
 } from '../api/chat.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useTask } from '../composables/useTask.js'
@@ -30,28 +32,36 @@ const attachments = ref([]),
 const { busy, error, run } = useTask()
 let controller, recorder, mediaStream
 const recording = ref(false)
+const approvals = ref([]),
+  deciding = ref(false)
 async function history() {
   if (auth.loggedIn) conversations.value = await listConversations()
 }
 function newChat() {
-  if (sending.value) return
+  if (sending.value || deciding.value) return
   conversationId.value = crypto.randomUUID()
   messages.value = []
   attachments.value = []
   error.value = ''
   intent.value = ''
+  approvals.value = []
 }
 async function openChat(id) {
-  if (sending.value) return
+  if (sending.value || deciding.value) return
   await run(async () => {
     const rows = await getConversationMessages(id)
     conversationId.value = id
     messages.value = rows
+    approvals.value = auth.loggedIn ? await getApprovals(id) : []
+    if (approvals.value.length) {
+      messages.value.push({ role: 'user', content: approvals.value[0].question || '数据管理请求' })
+      messages.value.push({ role: 'assistant', content: '操作尚未完成，请处理下方审批。' })
+    }
     attachments.value = []
   })
 }
 async function remove(id) {
-  if (sending.value) return
+  if (sending.value || deciding.value) return
   try {
     await ElMessageBox.confirm('删除这个会话及其聊天记录？', '删除会话', { type: 'warning' })
   } catch {
@@ -68,7 +78,14 @@ async function scroll() {
   bottom.value?.scrollIntoView({ block: 'nearest' })
 }
 async function send() {
-  if (sending.value || uploading.value || (!input.value.trim() && !attachments.value.length)) return
+  if (
+    sending.value ||
+    deciding.value ||
+    approvals.value.length ||
+    uploading.value ||
+    (!input.value.trim() && !attachments.value.length)
+  )
+    return
   const text = input.value.trim(),
     files = [...attachments.value]
   messages.value.push({
@@ -93,6 +110,11 @@ async function send() {
           scroll()
         }
         if (event.type === 'intent') intent.value = event.intent
+        if (event.type === 'approval') {
+          approvals.value = [event]
+          messages.value[index].content = '操作已暂停，等待你确认。'
+          scroll()
+        }
         if (event.type === 'error') throw new Error(event.message || event.content || '对话失败')
       },
       files.map((f) => f.id),
@@ -111,6 +133,43 @@ async function send() {
     sending.value = false
     await scroll()
   }
+}
+async function decide(approval, approved) {
+  if (deciding.value) return
+  deciding.value = true
+  error.value = ''
+  try {
+    const result = await decideApproval(conversationId.value, approval, approved)
+    if (result.status === 'waiting_approval') {
+      approvals.value = [result.approval]
+    } else {
+      approvals.value = []
+      messages.value = await getConversationMessages(conversationId.value)
+      await history()
+    }
+  } catch (err) {
+    error.value = apiErrorText(err, '审批处理失败，可以重试相同决定')
+    approvals.value = await getApprovals(conversationId.value).catch(() => approvals.value)
+  } finally {
+    deciding.value = false
+    await scroll()
+  }
+}
+function impactText(counts) {
+  const labels = {
+    messages: '条聊天',
+    summaries: '份会话摘要',
+    threads: '组执行记录',
+    checkpoints: '个执行步骤',
+    cards: '张记忆卡片',
+    history_chunks: '条历史记忆片段',
+  }
+  return (
+    Object.entries(counts || {})
+      .filter(([, count]) => count > 0)
+      .map(([key, count]) => `${count} ${labels[key] || key}`)
+      .join('、') || '当前没有可删除的数据'
+  )
 }
 async function upload(file) {
   if (!file) return
@@ -162,7 +221,7 @@ onUnmounted(() => {
 </script>
 <template>
   <PageTitle title="AI 出行助手" description="查天气、规划路线、安排日程，让想法变成一次出发。">
-    <el-button :disabled="sending" @click="newChat">＋ 新对话</el-button>
+    <el-button :disabled="sending || deciding" @click="newChat">＋ 新对话</el-button>
   </PageTitle>
   <div class="chat-grid">
     <aside class="panel history-panel">
@@ -174,12 +233,12 @@ onUnmounted(() => {
         class="conversation"
         :class="{ selected: c.conversation_id === conversationId }"
       >
-        <button :disabled="sending" @click="openChat(c.conversation_id)">
-          {{ c.title || '新对话' }}
+        <button :disabled="sending || deciding" @click="openChat(c.conversation_id)">
+          {{ c.pending ? '待处理 · ' : '' }}{{ c.title || '新对话' }}
         </button>
         <el-button
           text
-          :disabled="sending"
+          :disabled="sending || deciding"
           aria-label="删除会话"
           @click="remove(c.conversation_id)"
         >
@@ -212,6 +271,52 @@ onUnmounted(() => {
           <small>{{ m.role === 'user' ? '你' : '✦ 出行助手' }}</small>
           <MarkdownText :text="m.content || (sending ? '正在查询和整理信息…' : '')" />
         </article>
+        <section
+          v-for="approval in approvals"
+          :key="approval.approval_id"
+          class="approval-panel"
+          aria-label="敏感操作审批"
+        >
+          <h3>需要你的确认</h3>
+          <p>批准后才会执行。请核对操作对象和影响范围。</p>
+          <div v-for="(action, index) in approval.actions" :key="index">
+            <strong>{{ action.title }}</strong>
+            <p>
+              对象：{{ action.target_label }}
+              <span v-if="action.target_conversation_id">
+                （{{ action.target_conversation_id }}）
+              </span>
+            </p>
+            <p>影响范围：{{ impactText(action.counts) }}</p>
+            <p>{{ action.effect }}</p>
+          </div>
+          <p class="muted">
+            有效期至
+            {{
+              new Date(approval.expires_at).toLocaleString('zh-CN')
+            }}；提交时会重新校验权限与范围。
+          </p>
+          <p v-if="approval.status !== 'pending'">决定已记录，可继续恢复处理。</p>
+          <el-button
+            v-if="approval.status !== 'rejected'"
+            type="danger"
+            :loading="deciding"
+            :disabled="
+              sending ||
+              (approval.status === 'pending' && Date.parse(approval.expires_at) < Date.now())
+            "
+            @click="decide(approval, true)"
+          >
+            {{ approval.status === 'pending' ? '批准执行' : '继续恢复' }}
+          </el-button>
+          <el-button
+            v-if="approval.status === 'pending' || approval.status === 'rejected'"
+            :disabled="sending || deciding"
+            @click="decide(approval, false)"
+          >
+            {{ approval.status === 'rejected' ? '继续取消流程' : '拒绝并取消' }}
+          </el-button>
+        </section>
         <div ref="bottom" />
       </div>
       <div class="composer">
@@ -232,6 +337,7 @@ onUnmounted(() => {
           :rows="3"
           placeholder="例如：周六去广州塔，帮我看看天气和出行方案…"
           aria-label="对话内容"
+          :disabled="deciding || approvals.length > 0"
           @keydown.ctrl.enter.prevent="send"
         />
         <div class="composer-actions">
@@ -242,12 +348,16 @@ onUnmounted(() => {
                 type="file"
                 multiple
                 accept="image/*,audio/*,.pdf,.docx,.xlsx,.txt,.md,.csv,.json"
-                :disabled="sending || uploading"
+                :disabled="sending || deciding || approvals.length > 0 || uploading"
                 hidden
                 @change="pick"
               />
             </label>
-            <el-button text :disabled="sending || uploading" @click="record">
+            <el-button
+              text
+              :disabled="sending || deciding || approvals.length > 0 || uploading"
+              @click="record"
+            >
               {{ recording ? '停止录音' : '录音' }}
             </el-button>
             <small class="muted">{{ intent ? '正在处理：' + intent : 'Ctrl + Enter 发送' }}</small>
@@ -256,7 +366,13 @@ onUnmounted(() => {
           <el-button
             v-else
             type="primary"
-            :disabled="uploading || recording || (!input.trim() && !attachments.length)"
+            :disabled="
+              deciding ||
+              approvals.length > 0 ||
+              uploading ||
+              recording ||
+              (!input.trim() && !attachments.length)
+            "
             @click="send"
           >
             发送 ↗
@@ -357,6 +473,14 @@ onUnmounted(() => {
   margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid #edf0e9;
+}
+.approval-panel {
+  border: 1px solid #d6a167;
+  background: #fff7eb;
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 18px;
+  overflow-wrap: anywhere;
 }
 .composer-actions {
   display: flex;

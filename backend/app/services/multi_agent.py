@@ -42,7 +42,7 @@ from langchain_core.messages import (
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
-from app.services import checkpoint_service
+from app.services import approval_service, checkpoint_service
 from app.services.agent_metrics import agent_metrics
 from app.services.agent_registry import DOMAINS, route_domains
 from app.services.answer_verification import (
@@ -155,6 +155,9 @@ class MultiAgentState(TypedDict):
     verification: dict[str, Any]
     answer: str
     error: str
+    approval_id: str
+    action_approved: bool
+    action_result: dict
 
 
 def should_synthesize(domains: list[str]) -> bool:
@@ -318,6 +321,8 @@ async def plan_domains(question: str, history: list[dict[str, str]] | None = Non
     流式入口提前确定领域与意图；有领域时必须等核验完成，
     无领域的通用回答仍可转发模型 token。
     """
+    if approval_service.is_management_request(question):
+        return ["management"]
     domains = route_domains(question)
     if not domains:
         domains = await _llm_route(question, history)
@@ -337,6 +342,7 @@ async def _supervisor_node(state: MultiAgentState) -> dict:
 
 # 领域 → 旧意图标签（前端按旧词表展示 intent，映射回去以免破坏兼容）
 _DOMAIN_TO_LEGACY = {
+    "management": "management",
     "weather": "weather",
     "outfit": "outfit",
     "route": "travel",
@@ -365,6 +371,8 @@ def _route_from_supervisor(state: MultiAgentState) -> list[str]:
     没有命中领域时走 general（闲聊 / 无需工具的问题）。
     """
     domains = state.get("domains") or []
+    if domains == ["management"]:
+        return ["prepare_action"]
     if not domains:
         return ["general"]
     return [f"domain_{key}" for key in domains]
@@ -647,12 +655,15 @@ async def _build_graph(checkpointer=None):
     graph.add_node("general", _general_node)
     graph.add_node("synthesize", _synthesize_node)
     graph.add_node("verify", _verify_node)
+    approval_service.add_nodes(graph)
     domain_nodes = [f"domain_{key}" for key in DOMAINS]
     for key in DOMAINS:
         graph.add_node(f"domain_{key}", _make_domain_node(key))
 
     graph.add_edge(START, "supervisor")
-    graph.add_conditional_edges("supervisor", _route_from_supervisor, [*domain_nodes, "general"])
+    graph.add_conditional_edges(
+        "supervisor", _route_from_supervisor, [*domain_nodes, "general", "prepare_action"]
+    )
     for name in domain_nodes:
         # 每个领域节点都连到 synthesize：多域时它们全部结束后才执行汇总
         graph.add_conditional_edges(name, _after_domain, ["synthesize", "verify"])
@@ -726,6 +737,13 @@ async def chat_multi(
             _build_graph, _get_graph, initial, ("domain_answers", "domain_evidence", "metrics")
         )
         result = await checkpoint_service.invoke(ag, initial, kwargs)
+        if result.get("__interrupt__"):
+            return {
+                "domains": ["management"],
+                "answer": "请确认以下操作，批准后才会执行。",
+                "approval": result["__interrupt__"][0].value,
+                "status": "waiting_approval",
+            }
         answers = result.get("domain_answers") or {}
         answer = result.get("answer") or fallback_merge(answers)
         domains = list(result.get("domains") or [])

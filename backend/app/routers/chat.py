@@ -13,14 +13,17 @@ from app.core.config import settings
 from app.core.deps import CurrentUser, OptionalUser
 from app.core.response import success
 from app.db.session import get_db
+from app.schemas.agent_approval import ApprovalDecision
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services import (
     agent,
+    approval_service,
     attachment_service,
     chat_history_service,
     chat_summary_service,
     checkpoint_service,
     memory_service,
+    multi_agent,
 )
 
 router = APIRouter(prefix="/api/v1/chat", tags=["AI 对话"])
@@ -38,10 +41,16 @@ async def _save_turn(user_id, conversation_id, stored_message, answer, typed_mes
         user_message_id, assistant_message_id = await chat_history_service.add_turn(
             user_id, conversation_id, stored_message, answer
         )
-    await asyncio.gather(
-        memory_service.remember_turn(user_id, user_message_id, assistant_message_id, typed_message),
-        chat_summary_service.check_and_compress(user_id, conversation_id, assistant_message_id),
-    )
+    operations = [
+        chat_summary_service.check_and_compress(user_id, conversation_id, assistant_message_id)
+    ]
+    if not approval_service.is_management_request(typed_message):
+        operations.append(
+            memory_service.remember_turn(
+                user_id, user_message_id, assistant_message_id, typed_message
+            )
+        )
+    await asyncio.gather(*operations)
 
 
 def _default_ask(items: list) -> str:
@@ -182,9 +191,10 @@ async def chat(body: ChatRequest, current: OptionalUser = None) -> dict:
                 if images
                 else await agent.chat(prompt, user_id=user_id, history=history, **memory_kwargs)
             )
-            await _save_turn(
-                user_id, conversation_id, stored_message, result["answer"], body.message
-            )
+            if not result.get("approval"):
+                await _save_turn(
+                    user_id, conversation_id, stored_message, result["answer"], body.message
+                )
     except HTTPException:
         raise
     except Exception as exc:
@@ -193,6 +203,8 @@ async def chat(body: ChatRequest, current: OptionalUser = None) -> dict:
         raise
 
     data = ChatResponse(**result).model_dump()
+    if result.get("approval"):
+        data.update(status="waiting_approval", approval=result["approval"])
     data["conversation_id"] = conversation_id
     return success(data, message="对话完成")
 
@@ -218,6 +230,7 @@ async def chat_stream(body: ChatRequest, current: OptionalUser = None):
     async def event_generator():
         full_answer = ""
         done_event = {"type": "done", "conversation_id": conversation_id}
+        waiting_approval = False
         try:
             async with checkpoint_service.open_thread(
                 user_id,
@@ -240,12 +253,16 @@ async def chat_stream(body: ChatRequest, current: OptionalUser = None):
                 )
                 async for evt in stream:
                     etype = evt.get("type")
+                    if etype == "approval":
+                        waiting_approval = True
                     if etype == "token":
                         full_answer += evt.get("content", "")
                     if etype == "done":
                         done_event.update(evt)
                         continue
                     yield {"event": "message", "data": json.dumps(evt, ensure_ascii=False)}
+                if waiting_approval:
+                    return
                 if ctx:
                     snapshot = await ctx.saver.aget_tuple(ctx.config)
                     full_answer = snapshot.checkpoint["channel_values"].get("answer", full_answer)
@@ -311,6 +328,10 @@ async def resume_conversation(
             current.id, conversation_id, mode, resume=True
         ) as ctx:
             result = await agent.chat("", user_id=current.id)
+            if result.get("approval"):
+                return success(
+                    {**result, "conversation_id": conversation_id}, message="等待人工审批"
+                )
             await _save_turn(
                 current.id,
                 conversation_id,
@@ -323,6 +344,48 @@ async def resume_conversation(
         raise
     except Exception as exc:
         raise HTTPException(503, "恢复暂未成功，检查点已保留") from exc
+
+
+@router.get("/conversations/{conversation_id}/approvals", response_model=dict)
+async def get_approvals(
+    conversation_id: str,
+    current: CurrentUser,
+    mode: Literal["single", "multi"] | None = None,
+) -> dict:
+    return success({"items": await approval_service.active(current.id, conversation_id, mode)})
+
+
+@router.post("/conversations/{conversation_id}/approval", response_model=dict)
+async def decide_approval(
+    conversation_id: str,
+    body: ApprovalDecision,
+    current: CurrentUser,
+    mode: Literal["single", "multi"] = "single",
+) -> dict:
+    try:
+        async with checkpoint_service.open_thread(
+            current.id, conversation_id, mode, resume=True
+        ) as ctx:
+            graph = await (
+                multi_agent._build_graph(ctx.saver)
+                if mode == "multi"
+                else agent._build_graph(ctx.saver)
+            )
+            await approval_service.decide(body.approval_id, body.approved, graph)
+            result = await agent.chat("", user_id=current.id)
+            if not result.get("approval"):
+                await _save_turn(
+                    current.id,
+                    conversation_id,
+                    ctx.request["stored_message"],
+                    result["answer"],
+                    ctx.request["typed_message"],
+                )
+            return success({**result, "conversation_id": conversation_id}, message="审批已处理")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(503, "审批执行中断，可重新提交相同决定或恢复流程") from exc
 
 
 @router.get("/conversations", response_model=dict)

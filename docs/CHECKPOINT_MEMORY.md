@@ -31,7 +31,9 @@ Checkpointer 保存的是图状态，字段可以包含聊天消息，但不会�
 
 会话级 PostgreSQL advisory lock 覆盖历史读取、模型执行、最终保存和删除。并发新消息、恢复或删除返回 409，避免交错写入。两种 Agent 状态分开，聊天时间线共用；任一模式有未保存任务，另一模式也不能绕过它继续发送。
 
-恢复执行 `ainvoke(None, config=...)`，不重复提交提问。已落库的单 Agent 工具节点不用重跑；多 Agent 并行步骤通过 pending writes 保留成功领域，只重跑失败领域。图已结束但消息尚未保存时，直接读取最终状态并补存。消息与完成标记同一事务提交，重复恢复不重复插入聊天轮次或触发记忆提取。
+故障恢复执行 `ainvoke(None, config=...)`，不重复提交提问。已落库的单 Agent 工具节点不用重跑；多 Agent 并行步骤通过 pending writes 保留成功领域，只重跑失败领域。图已结束但消息尚未保存时，直接读取最终状态并补存。消息与完成标记同一事务提交，重复恢复不重复插入聊天轮次或触发记忆提取。
+
+敏感操作的人工暂停使用原生 `interrupt()`，用户决定由认证审批接口保存，再以 `Command(resume=...)` 恢复。普通 resume 在审批仍 pending 时继续返回等待，不批准也不执行操作。单/多图共用专门的审批节点和事务回执；聊天页面可批准、拒绝、刷新后找回及重试已保存的决定。具体范围和限制见 [AGENT_APPROVAL.md](AGENT_APPROVAL.md)。
 
 ## 启用
 
@@ -66,7 +68,7 @@ MEMORY_ENABLED=true
 | `DELETE /api/v1/chat/conversations/{id}/checkpoint?mode=single` | 放弃该模式图状态，保留聊天、摘要和长期记忆 |
 | 原有 `DELETE /api/v1/chat/conversations/{id}` | 删除消息、摘要和两种模式的检查点，记忆来源级联规则不变 |
 
-multi 恢复须传 `mode=multi`，即使默认模式现在已改为 single。普通接口图异常返回 503 并保留检查点；未完成任务阻止新问题，返回 409。SSE 发出响应头后不能更改 HTTP 状态，因此中断发 `type="error"`，不发 done 或保存半段草稿。现有前端已处理 error 事件；本次未增加专用恢复 UI，可使用 API 恢复或清除。
+multi 恢复须传 `mode=multi`，即使默认模式现在已改为 single。普通接口图异常返回 503 并保留检查点；未完成任务阻止新问题，返回 409。SSE 发出响应头后不能更改 HTTP 状态，因此异常中断发 `type="error"`，不发 done 或保存半段草稿。人工审批暂停发 `type="approval"` 并结束响应，也不发 done。前端已增加审批卡片与已保存决定的恢复按钮；其他图故障仍可使用 API 恢复或清除。
 
 ## 边界与成本
 

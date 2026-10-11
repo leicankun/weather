@@ -29,4 +29,6 @@ AI 对话 → agent.py（single）或 multi_agent.py（multi）→ LangChain 模
 
 登录文字对话的单/多 Agent 图接入官方 PostgreSQL Checkpointer，按用户、会话、模式隔离，保存节点边界状态与 pending writes，支持恢复和幂等补存消息。新任务继续读取摘要与双层记忆，并刷新消息/领域结果/指标等 reducer。并发、恢复和删除由跨进程锁保护，删除会话或用户级联清理快照。实现与范围见 [CHECKPOINT_MEMORY.md](CHECKPOINT_MEMORY.md)。图片仍走独立视觉路径，不产生图快照。天气共享快照和逐小时自动重规划仍属于后续增强方向。
 
+Agent 发起的敏感数据管理走单/多图共用的独占审批分支：结构化提案 → 后端白名单与范围冻结 → `interrupt()` 保存状态并释放请求 → 页面批准/拒绝 → `Command` 恢复 → 再次校验归属、有效期和范围 → 事务执行与回执 → 返回结果。当前允许删除本人指定旧会话、清空本人卡片/历史 RAG，未开放整库删除或任意 SQL。通用 resume 不会代替用户批准，重复恢复读回执避免重删。接口、前端卡片与限制见 [AGENT_APPROVAL.md](AGENT_APPROVAL.md)。
+
 部署采用 docker-compose.yml；migrate 服务先执行 Alembic，API / Celery 等待迁移成功。开发代理统一到 8000，用户端 5173，管理端 5174。

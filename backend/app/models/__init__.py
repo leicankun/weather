@@ -1,3 +1,4 @@
+from app.models.agent_approval import AgentApproval
 from app.models.chat_message import ChatMessage
 from app.models.chat_summary import ChatSummary
 from app.models.checkpoint import AgentCheckpointThread
@@ -18,6 +19,7 @@ from app.models.weather import WeatherHistory
 from app.models.weather_alert import WeatherAlert
 
 __all__ = [
+    "AgentApproval",
     "AgentCheckpointThread",
     "ChatMessage",
     "ChatSummary",

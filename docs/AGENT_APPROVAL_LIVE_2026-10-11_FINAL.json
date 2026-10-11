@@ -1,0 +1,262 @@
+{
+  "started_at": "2026-10-11T07:13:53.256792+00:00",
+  "llm_provider": "deepseek",
+  "scope": "Real configured LLM, FastAPI ASGI, PostgreSQL; no embedding or reranker calls needed",
+  "cases": [
+    {
+      "mode": "single",
+      "question": "请删除会话 ID 为 live-target-d24f06b96a 的旧聊天记录。",
+      "http_status": 200,
+      "response": {
+        "intent": "management",
+        "answer": "请确认以下操作，批准后才会执行。",
+        "status": "waiting_approval",
+        "approval": {
+          "approval_id": "e743185bd1d04e6e921a927902294cc6",
+          "conversation_id": "live-approval-d24f06b96a",
+          "mode": "single",
+          "status": "pending",
+          "expires_at": "2026-10-11T07:28:59.471600+00:00",
+          "actions": [
+            {
+              "title": "删除本人会话",
+              "counts": {
+                "cards": 0,
+                "threads": 0,
+                "messages": 2,
+                "summaries": 0,
+                "checkpoints": 0,
+                "history_chunks": 0
+              },
+              "effect": "删除目标会话原始消息、短期摘要、图快照和以这些消息为来源的记忆，不影响其他会话。",
+              "operation": "delete_conversation",
+              "target_label": "合成旧聊天记录",
+              "target_conversation_id": "live-target-d24f06b96a"
+            }
+          ]
+        },
+        "conversation_id": "live-approval-d24f06b96a"
+      }
+    },
+    {
+      "mode": "single",
+      "question": "请删除会话 ID 为 live-target-d24f06b96a 的旧聊天记录。",
+      "http_status": 200,
+      "response": {
+        "intent": "management",
+        "answer": "请确认以下操作，批准后才会执行。",
+        "status": "waiting_approval",
+        "approval": {
+          "approval_id": "22b9de0bbc834465a96ffc0273fda71d",
+          "conversation_id": "live-approval-d24f06b96a",
+          "mode": "single",
+          "status": "pending",
+          "expires_at": "2026-10-11T07:29:01.030105+00:00",
+          "actions": [
+            {
+              "title": "删除本人会话",
+              "counts": {
+                "cards": 0,
+                "threads": 0,
+                "messages": 2,
+                "summaries": 0,
+                "checkpoints": 0,
+                "history_chunks": 0
+              },
+              "effect": "删除目标会话原始消息、短期摘要、图快照和以这些消息为来源的记忆，不影响其他会话。",
+              "operation": "delete_conversation",
+              "target_label": "合成旧聊天记录",
+              "target_conversation_id": "live-target-d24f06b96a"
+            }
+          ]
+        },
+        "conversation_id": "live-approval-d24f06b96a"
+      }
+    },
+    {
+      "mode": "single",
+      "question": "请清空我的长期记忆卡片和历史记忆库，保留聊天记录。",
+      "http_status": 200,
+      "response": {
+        "intent": "management",
+        "answer": "请确认以下操作，批准后才会执行。",
+        "status": "waiting_approval",
+        "approval": {
+          "approval_id": "e6009cc232844edfb95406783de05c18",
+          "conversation_id": "live-approval-d24f06b96a",
+          "mode": "single",
+          "status": "pending",
+          "expires_at": "2026-10-11T07:29:11.904489+00:00",
+          "actions": [
+            {
+              "title": "清空本人长期记忆",
+              "counts": {
+                "cards": 1,
+                "threads": 0,
+                "messages": 0,
+                "summaries": 0,
+                "checkpoints": 0,
+                "history_chunks": 6
+              },
+              "effect": "清空本人全部偏好/事实卡片和历史 RAG，设置遗忘水位；原始聊天、短期摘要和图快照保留。",
+              "operation": "clear_memory",
+              "target_label": "本人全部长期记忆",
+              "target_conversation_id": null
+            }
+          ]
+        },
+        "conversation_id": "live-approval-d24f06b96a"
+      }
+    },
+    {
+      "mode": "multi",
+      "question": "请删除会话 ID 为 live-target-99ea2f622a 的旧聊天记录。",
+      "http_status": 200,
+      "response": {
+        "intent": "management",
+        "answer": "请确认以下操作，批准后才会执行。",
+        "status": "waiting_approval",
+        "approval": {
+          "approval_id": "474687399575422bb9b6c9782de9a6a4",
+          "conversation_id": "live-approval-99ea2f622a",
+          "mode": "multi",
+          "status": "pending",
+          "expires_at": "2026-10-11T07:29:13.112328+00:00",
+          "actions": [
+            {
+              "title": "删除本人会话",
+              "counts": {
+                "cards": 0,
+                "threads": 0,
+                "messages": 2,
+                "summaries": 0,
+                "checkpoints": 0,
+                "history_chunks": 0
+              },
+              "effect": "删除目标会话原始消息、短期摘要、图快照和以这些消息为来源的记忆，不影响其他会话。",
+              "operation": "delete_conversation",
+              "target_label": "合成旧聊天记录",
+              "target_conversation_id": "live-target-99ea2f622a"
+            }
+          ]
+        },
+        "conversation_id": "live-approval-99ea2f622a"
+      }
+    },
+    {
+      "mode": "multi",
+      "question": "请删除会话 ID 为 live-target-99ea2f622a 的旧聊天记录。",
+      "http_status": 200,
+      "response": {
+        "intent": "management",
+        "answer": "请确认以下操作，批准后才会执行。",
+        "status": "waiting_approval",
+        "approval": {
+          "approval_id": "245e9f40fd684f2c90d2b30999b2dc8d",
+          "conversation_id": "live-approval-99ea2f622a",
+          "mode": "multi",
+          "status": "pending",
+          "expires_at": "2026-10-11T07:29:14.570529+00:00",
+          "actions": [
+            {
+              "title": "删除本人会话",
+              "counts": {
+                "cards": 0,
+                "threads": 0,
+                "messages": 2,
+                "summaries": 0,
+                "checkpoints": 0,
+                "history_chunks": 0
+              },
+              "effect": "删除目标会话原始消息、短期摘要、图快照和以这些消息为来源的记忆，不影响其他会话。",
+              "operation": "delete_conversation",
+              "target_label": "合成旧聊天记录",
+              "target_conversation_id": "live-target-99ea2f622a"
+            }
+          ]
+        },
+        "conversation_id": "live-approval-99ea2f622a"
+      }
+    },
+    {
+      "mode": "multi",
+      "question": "请清空我的长期记忆卡片和历史记忆库，保留聊天记录。",
+      "http_status": 200,
+      "response": {
+        "intent": "management",
+        "answer": "请确认以下操作，批准后才会执行。",
+        "status": "waiting_approval",
+        "approval": {
+          "approval_id": "d27c81cc8b64499db3b11bf38dcb4312",
+          "conversation_id": "live-approval-99ea2f622a",
+          "mode": "multi",
+          "status": "pending",
+          "expires_at": "2026-10-11T07:29:25.561841+00:00",
+          "actions": [
+            {
+              "title": "清空本人长期记忆",
+              "counts": {
+                "cards": 1,
+                "threads": 0,
+                "messages": 0,
+                "summaries": 0,
+                "checkpoints": 0,
+                "history_chunks": 6
+              },
+              "effect": "清空本人全部偏好/事实卡片和历史 RAG，设置遗忘水位；原始聊天、短期摘要和图快照保留。",
+              "operation": "clear_memory",
+              "target_label": "本人全部长期记忆",
+              "target_conversation_id": null
+            }
+          ]
+        },
+        "conversation_id": "live-approval-99ea2f622a"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "mode": "single",
+      "check": "reject preserves target",
+      "passed": true,
+      "final_answer": "你已拒绝，本次操作已取消，没有删除数据。",
+      "remaining_messages": 2
+    },
+    {
+      "mode": "single",
+      "check": "approve deletes only after consent",
+      "passed": true,
+      "final_answer": "已按你批准的范围完成操作。\n删除本人会话：合成旧聊天记录，删除 2 条聊天和 0 组执行记录。",
+      "remaining_messages": 0
+    },
+    {
+      "mode": "single",
+      "check": "clear memory preserves chat and records execution receipt",
+      "passed": true,
+      "final_answer": "已按你批准的范围完成操作。\n清空本人长期记忆：本人全部长期记忆，清空 1 张卡片和 6 条历史记忆片段。"
+    },
+    {
+      "mode": "multi",
+      "check": "reject preserves target",
+      "passed": true,
+      "final_answer": "你已拒绝，本次操作已取消，没有删除数据。",
+      "remaining_messages": 2
+    },
+    {
+      "mode": "multi",
+      "check": "approve deletes only after consent",
+      "passed": true,
+      "final_answer": "已按你批准的范围完成操作。\n删除本人会话：合成旧聊天记录，删除 2 条聊天和 0 组执行记录。",
+      "remaining_messages": 0
+    },
+    {
+      "mode": "multi",
+      "check": "clear memory preserves chat and records execution receipt",
+      "passed": true,
+      "final_answer": "已按你批准的范围完成操作。\n清空本人长期记忆：本人全部长期记忆，清空 1 张卡片和 6 条历史记忆片段。"
+    }
+  ],
+  "cleanup_passed": true,
+  "finished_at": "2026-10-11T07:14:25.800363+00:00",
+  "passed": true
+}

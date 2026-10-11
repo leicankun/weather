@@ -34,7 +34,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from app.core.config import settings
-from app.services import checkpoint_service, llm_client, multi_agent
+from app.services import approval_service, checkpoint_service, llm_client, multi_agent
 from app.services.llm_client import get_llm
 from app.services.local_tools import get_local_tools
 from app.services.mcp_client import get_mcp_tools
@@ -162,6 +162,9 @@ class AgentState(TypedDict):
     answer: str
     error: str
     memory_context: str
+    approval_id: str
+    action_approved: bool
+    action_result: dict
 
 
 def _keyword_intent(text: str) -> str:
@@ -186,6 +189,8 @@ def _strong_keyword_intent(text: str) -> str | None:
     因此对高置信关键词直接定意图，不依赖 LLM 分类稳定性，
     顺带省掉一次 LLM 调用（省 token、降延迟）。
     """
+    if approval_service.is_management_request(text):
+        return "management"
     # 资讯类优先判定：归入 knowledge（该意图下会绑定 search_news 工具）
     if any(kw in text for kw in _NEWS_KEYWORDS):
         return "knowledge"
@@ -299,7 +304,9 @@ async def _handle_error(state: AgentState) -> dict:
 
 def _should_error(state: AgentState) -> str:
     """路由：有 error 则进入兜底，否则继续。"""
-    return "error" if state.get("error") else "agent"
+    if state.get("error"):
+        return "error"
+    return "management" if state.get("intent") == "management" else "agent"
 
 
 async def _build_graph(checkpointer=None):
@@ -311,12 +318,13 @@ async def _build_graph(checkpointer=None):
     graph.add_node("agent", _agent_node)
     graph.add_node("tools", ToolNode(tools))
     graph.add_node("handle_error", _handle_error)
+    approval_service.add_nodes(graph)
 
     graph.add_edge(START, "classify_intent")
     graph.add_conditional_edges(
         "classify_intent",
         _should_error,
-        {"error": "handle_error", "agent": "agent"},
+        {"error": "handle_error", "agent": "agent", "management": "prepare_action"},
     )
     # 核心工具循环：agent -> tools -> agent（直到无 tool_calls 才 END）
     graph.add_conditional_edges(
@@ -365,6 +373,9 @@ def _build_initial_state(
         "intent": "",
         "answer": "",
         "error": "",
+        "approval_id": "",
+        "action_approved": False,
+        "action_result": {},
     }
 
 
@@ -406,6 +417,11 @@ async def chat(
         return {
             "intent": multi_agent.to_legacy_intent(list(result.get("domains") or [])),
             "answer": result.get("answer", ""),
+            **(
+                {"approval": result["approval"], "status": "waiting_approval"}
+                if result.get("approval")
+                else {}
+            ),
         }
 
     initial = _build_initial_state(user_input, history, memory_context)
@@ -415,6 +431,13 @@ async def chat(
             _build_graph, _get_agent, initial, ("messages",)
         )
         result = await checkpoint_service.invoke(ag, initial, kwargs)
+        if result.get("__interrupt__"):
+            return {
+                "intent": "management",
+                "answer": "请确认以下操作，批准后才会执行。",
+                "status": "waiting_approval",
+                "approval": result["__interrupt__"][0].value,
+            }
         return {"intent": result.get("intent", ""), "answer": result.get("answer", "")}
     except Exception as exc:
         if checkpoint_service.current():
@@ -439,6 +462,15 @@ async def chat_stream(
     multi 模式下先算一次领域（关键词命中时零成本），
     既用于推意图、也传给多智能体避免重复路由。
     """
+    if approval_service.is_management_request(user_input):
+        result = await chat(user_input, user_id, history, memory_context)
+        yield {"type": "intent", "intent": "management"}
+        if result.get("approval"):
+            yield {"type": "approval", **result["approval"]}
+            return
+        yield {"type": "token", "content": result["answer"]}
+        yield {"type": "done"}
+        return
     if use_multi_agent():
         domains = await multi_agent.plan_domains(user_input, history=history)
         yield {"type": "intent", "intent": multi_agent.to_legacy_intent(domains)}

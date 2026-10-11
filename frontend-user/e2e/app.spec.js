@@ -9,6 +9,93 @@ const current = {
   weather_desc: '多云',
   time: '2026-10-09T10:00:00',
 }
+
+for (const approved of [false, true]) {
+  test(`sensitive operations pause, survive reload and ${approved ? 'approve' : 'reject'}`, async ({
+    page,
+  }) => {
+    await mockApi(page)
+    let pending = false
+    let finished = false
+    let conversationId
+    const decisions = []
+    const payload = {
+      approval_id: 'a'.repeat(32),
+      mode: 'multi',
+      status: 'pending',
+      expires_at: '2099-01-01T00:00:00Z',
+      question: '删除旧会话',
+      actions: [
+        {
+          operation: 'delete_conversation',
+          title: '删除本人会话',
+          target_conversation_id: 'old',
+          target_label: '旧出行计划',
+          counts: { messages: 2, cards: 1 },
+          effect: '删除目标会话，不影响其他会话。',
+        },
+      ],
+    }
+    await page.route('**/api/v1/chat/**', async (route) => {
+      const req = route.request(),
+        url = new URL(req.url()),
+        path = url.pathname
+      const ok = (data) => route.fulfill({ json: { code: 0, message: 'ok', data } })
+      if (path.endsWith('/stream')) {
+        conversationId = req.postDataJSON().conversation_id
+        pending = true
+        return route.fulfill({
+          contentType: 'text/event-stream',
+          body: `data: ${JSON.stringify({ type: 'approval', ...payload, conversation_id: conversationId })}\n\n`,
+        })
+      }
+      if (path.endsWith('/approval')) {
+        decisions.push({ ...req.postDataJSON(), mode: url.searchParams.get('mode') })
+        finished = true
+        pending = false
+        return ok({ answer: approved ? '已删除旧会话。' : '操作已取消，没有删除数据。' })
+      }
+      if (path.endsWith('/approvals'))
+        return ok({ items: pending ? [{ ...payload, conversation_id: conversationId }] : [] })
+      if (path.endsWith('/conversations'))
+        return ok({
+          items: conversationId
+            ? [{ conversation_id: conversationId, title: '删除旧会话', pending }]
+            : [],
+        })
+      return ok({
+        items: finished
+          ? [
+              { role: 'user', content: '删除旧会话' },
+              {
+                role: 'assistant',
+                content: approved ? '已删除旧会话。' : '操作已取消，没有删除数据。',
+              },
+            ]
+          : [],
+      })
+    })
+    await page.goto('/chat')
+    await page.getByRole('textbox', { name: '对话内容' }).fill('删除旧会话')
+    await page.getByRole('button', { name: '发送 ↗' }).click()
+    const panel = page.getByRole('region', { name: '敏感操作审批' })
+    await expect(panel).toBeVisible()
+    await expect(panel).toContainText('旧出行计划')
+    await expect(panel).toContainText('2 条聊天')
+    expect(decisions).toHaveLength(0)
+    await expect(page.getByRole('textbox', { name: '对话内容' })).toBeDisabled()
+    await page.screenshot({ path: `test-results/approval-${approved}.png`, fullPage: true })
+    await page.reload()
+    await page.getByRole('button', { name: '待处理 · 删除旧会话' }).click()
+    await expect(panel).toBeVisible()
+    await panel.getByRole('button', { name: approved ? '批准执行' : '拒绝并取消' }).click()
+    await expect(panel).toHaveCount(0)
+    expect(decisions).toEqual([{ approval_id: 'a'.repeat(32), approved, mode: 'multi' }])
+    await expect(page.locator('.messages')).toContainText(
+      approved ? '已删除旧会话。' : '操作已取消，没有删除数据。',
+    )
+  })
+}
 const forecast = [
   { date: '2026-10-10', temp_min: 21, temp_max: 28, weather_desc: '晴', precipitation: 0 },
 ]
@@ -264,7 +351,9 @@ test('all remaining routes load without runtime exceptions', async ({ page }) =>
   expect(errors).toEqual([])
 })
 
-test('knowledge search displays rerank scores including zero and falls back to RRF', async ({ page }) => {
+test('knowledge search displays rerank scores including zero and falls back to RRF', async ({
+  page,
+}) => {
   await mockApi(page)
   await page.route('**/api/v1/my-knowledge/search', (route) =>
     route.fulfill({
