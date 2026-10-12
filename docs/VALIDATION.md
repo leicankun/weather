@@ -1,5 +1,13 @@
 # 重构验证记录
 
+## 2026-10-12：RAG 检索与回答错误诊断
+
+新增可复现真实诊断脚本与报告，只测试、不修复生产逻辑。96 项无数据库单元回归及 21 项真实 PostgreSQL/API 回归通过；已有真实 HTTP/原生 Retrieval Chain 的 7 个基线案例通过且无模型回退。另以临时合成资料测试 8 个问题、14 份单/多 Agent 回答，并独立复测截断问题的 2 份回答。
+
+确定复现：完整检索和 Agent 实际检索均包含块尾集合信息，但 `search_my_plans` 每块只输出前 200 字，单/多 Agent 四份回答都错说资料未提供；多 Agent 两次均核验 passed。完整上下文直接问答正确。无关问题仍返回低相关 Top-K，但本次未诱发编造。扩展诊断及复测分别记录 12、4 次 Embedding/rerank 降级告警，不能声称全部无降级或证明所有场景正确。详情、复现命令、原始证据和后续修复建议见 [诊断报告](RAG_ERROR_DIAGNOSTIC_2026-10-12.md)。
+
+`ruff check .` 通过；`ruff format --check .` 的唯一失败仍是任务前 `embedding_client.py` 行尾空格，保留用户编辑；新脚本格式检查通过。未修改 `.env` 或原有资料，所有临时账号已清理；只创建本地提交，不推送上游。完整后端与前端/浏览器套件未运行。
+
 ## 2026-10-11：Agent 原生中断与人工审批
 
 单/多图新增共用管理分支，Agent 提案经服务端冻结对象和范围后，以 `interrupt()` 暂停并释放请求；页面批准/拒绝后通过 `Command` 恢复，重新校验并原子执行与保存回执。当前支持本人指定旧会话删除、本人长期卡片/历史 RAG 清空。审批与 Checkpointer 的 41 项数据库回归通过；前端 lint/18 项单元/两端构建、11 项 Chrome 浏览器测试通过。真实配置模型/API 验收、完整后端结果与已有失败详见 [AGENT_APPROVAL_VALIDATION_2026-10-11.md](AGENT_APPROVAL_VALIDATION_2026-10-11.md)。流程与边界见 [AGENT_APPROVAL.md](AGENT_APPROVAL.md)。
