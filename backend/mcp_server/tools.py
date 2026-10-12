@@ -17,6 +17,7 @@ from app.db.session import AsyncSessionLocal
 from app.models.news import News
 from app.services import rag_service, web_search_service
 from app.services.city_dict import all_supported_cities, lookup_city
+from app.services.knowledge_tool_context import format_knowledge_context
 from app.services.weather_service import fetch_weather, weather_to_text
 from skills.outfit_recommend.scripts import outfit_engine
 from skills.travel_planning.scripts import route_planner
@@ -127,14 +128,7 @@ async def search_knowledge(query: str, top_k: int = 5) -> str:
     if not items:
         return "未找到相关知识。可尝试换一种说法，或询问天气、出行、穿搭类问题。"
 
-    lines = [f"知识库检索到 {len(items)} 条相关内容："]
-    for it in items:
-        content = (it.get("content") or "")[:200].replace("\n", " ")
-        score = it.get("rerank_score")
-        label = "重排得分" if score is not None else "融合得分"
-        score = it.get("rrf_score", 0) if score is None else score
-        lines.append(f"- [{it.get('title', '')}]（{label} {score:.4f}）{content}...")
-    return "\n".join(lines)
+    return format_knowledge_context(items, scope="public")
 
 
 async def web_search(query: str, max_results: int = 5) -> str:

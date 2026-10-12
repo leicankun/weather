@@ -14,6 +14,7 @@ from __future__ import annotations
 from langchain_core.tools import tool
 
 from app.services import user_knowledge_service
+from app.services.knowledge_tool_context import format_knowledge_context
 from app.services.user_context import get_current_user_id
 from skills.itinerary_planner.scripts import planner
 from skills.itinerary_reminder.scripts import reminder
@@ -41,14 +42,7 @@ async def search_my_plans(query: str, top_k: int = 5) -> str:
     if not items:
         return "你的个人知识库中暂无相关内容。可先上传你的出行计划或旅游笔记。"
 
-    lines = [f"你的个人知识库检索到 {len(items)} 条相关内容："]
-    for it in items:
-        content = (it.get("content") or "")[:200].replace("\n", " ")
-        score = it.get("rerank_score")
-        label = "重排得分" if score is not None else "融合得分"
-        score = it.get("rrf_score", 0) if score is None else score
-        lines.append(f"- [{it.get('title', '')}]（{label} {score:.4f}）{content}...")
-    return "\n".join(lines)
+    return format_knowledge_context(items, scope="personal")
 
 
 @tool

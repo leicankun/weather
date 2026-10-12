@@ -1,5 +1,7 @@
 # 测试
 
+RAG 工具完整证据回归：`python -m pytest tests/unit/test_rag_tool_context.py tests/unit/test_multi_agent.py tests/unit/test_answer_verification.py --no-db -o addopts= -q`。覆盖公共/私人实际工具经过单/多图后保留块尾事实、来源与换行、核验完整证据、整体预算省略和 MCP 文本解包。真实图与聊天 HTTP 验收使用 `app.scripts.evaluate_rag_errors`，会调用已配置真实模型、创建并清理合成资料；命令与结果见 [RAG_TOOL_CONTEXT.md](RAG_TOOL_CONTEXT.md)。
+
 Agent 人工审批回归：`python -m pytest tests/api/test_agent_approvals.py tests/api/test_checkpoints.py -o addopts= -q`。使用真实 PostgreSQL、官方 saver、LangGraph interrupt 和单/多图；模型提案替身覆盖普通/SSE 暂停、连接释放、未批准不执行、批准/拒绝、参数篡改和跨用户隔离、审批过期/范围变化、清空水位、并发决定、批量事务回滚及执行回执幂等。前端 `npm run test:e2e` 另覆盖审批卡片、刷新找回和严格决定请求，契约 API 使用 mock。真实模型验收：`python -m app.scripts.verify_agent_approval --output ../docs/AGENT_APPROVAL_LIVE_<新名称>.json`，调用配置的付费模型与开发 PostgreSQL，通过 FastAPI ASGI 创建、审批并清理合成账号；已有报告拒绝覆盖。流程见 [AGENT_APPROVAL.md](AGENT_APPROVAL.md)，实际结果见 [审批验证记录](AGENT_APPROVAL_VALIDATION_2026-10-11.md)。
 
 Checkpointer 回归：`python -m pytest tests/api/test_checkpoints.py tests/api/test_migrations.py -o addopts= -q`。使用真实 PostgreSQL、官方 saver 与完整单/多 Agent 图，模型替身覆盖节点中断、并行 pending writes、恢复幂等、摘要/卡片/历史 RAG 兼容、用户会话模式隔离、并发与级联删除。真实模型验收：`python -m app.scripts.verify_checkpoint_memory --output ../docs/CHECKPOINT_LIVE_RESULTS_2026-10-11.json`，会调用配置的付费模型，以临时合成账号测试并清理；已有报告拒绝覆盖。架构和恢复 API 见 [CHECKPOINT_MEMORY.md](CHECKPOINT_MEMORY.md)，结果见 [验证记录](CHECKPOINT_VALIDATION_2026-10-11.md)。

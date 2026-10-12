@@ -14,6 +14,8 @@ AI 对话 → agent.py（single）或 multi_agent.py（multi）→ LangChain 模
 
 公共与个人文档在 Embedding 前共用标题分块器：Markdown ATX 标题是硬边界，chunk 和 overlap 均不跨标题；区域内部开最多 300 字符窗口，按段末／句末回退，只有超长单元素才硬切。默认重叠最多 50 字符，优先保留完整段／句。实现与已有索引更新方式见 [CHUNKING.md](CHUNKING.md)。
 
+公共 MCP 与私人本地 RAG 工具返回带标题、来源和分块编号的完整检索正文，取消逐块 200 字摘要。工具 JSON 总输出最多 6000 字符，按排名保留完整分块，超预算明确标记省略；模型和核验收到相同已纳入证据。MCP 文本块在多 Agent 中解包，避免额外转义造成预算膨胀。限制与回归见 [RAG_TOOL_CONTEXT.md](RAG_TOOL_CONTEXT.md)。
+
 ## 前端目录
 
 - pages/*.vue：按路由拆分的业务页面，路由懒加载。

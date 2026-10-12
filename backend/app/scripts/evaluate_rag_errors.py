@@ -1,7 +1,9 @@
 """Diagnose retrieval, tool-context loss and grounded answers with real APIs.
 
-Creates only synthetic private users/documents, removes them in finally, and
-does not save agent answers to chat history or modify configuration files.
+Creates only synthetic private users/documents and removes them in finally.
+Direct graph runs do not save chats; --http-only also tests the real chat
+endpoint, whose temporary chats are removed with the synthetic users.
+Configuration files are never modified.
 Marker checks are diagnostics, not a semantic correctness judge; review JSON.
 """
 
@@ -150,7 +152,7 @@ def redact(value: str) -> str:
     return value
 
 
-async def evaluate(output: Path, only: list[str] | None = None) -> None:
+async def evaluate(output: Path, only: list[str] | None = None, *, http_only: bool = False) -> None:
     if output.exists():
         raise FileExistsError("Choose a new output path; existing reports are preserved")
     if not embedding_client.available or not rerank_client.available or not settings.RERANK_ENABLED:
@@ -165,7 +167,11 @@ async def evaluate(output: Path, only: list[str] | None = None) -> None:
         logger.setLevel(logging.WARNING)
     report = {
         "at": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
-        "scope": "real development PostgreSQL + real embedding/rerank/LLM; full agent graphs without chat persistence",
+        "scope": (
+            "FastAPI ASGI chat + real PostgreSQL and model APIs; temporary chats cleaned up"
+            if http_only
+            else "real development PostgreSQL + real embedding/rerank/LLM; full agent graphs without chat persistence"
+        ),
         "models": {
             "embedding": embedding_client.model,
             "rerank": rerank_client.model,
@@ -215,7 +221,7 @@ async def evaluate(output: Path, only: list[str] | None = None) -> None:
             "leaked_other_user_marker": any("海鸥753" in hit["content"] for hit in isolated),
         }
         user_knowledge_service.search = traced_search
-        for case in CASES:
+        for case in [] if http_only else CASES:
             if only and case["id"] not in only:
                 continue
             item = {**case, "agents": {}}
@@ -281,6 +287,52 @@ async def evaluate(output: Path, only: list[str] | None = None) -> None:
             except Exception as exc:  # noqa: BLE001 Preserve failed real cases in the report.
                 item["error"] = type(exc).__name__
                 save()
+        if http_only:
+            import httpx
+
+            from app.core.security import create_access_token
+            from app.main import app
+
+            for handler in logging.getLogger().handlers:
+                handler.setLevel(logging.CRITICAL)
+            case = next(case for case in CASES if case["id"] == "tail_context")
+            original_mode = settings.AGENT_MODE
+            report["http_cases"] = []
+            try:
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app), base_url="http://rag-context-live"
+                ) as client:
+                    for mode in ("single", "multi"):
+                        settings.AGENT_MODE = mode
+                        traces.clear()
+                        print(f"http tail_context: {mode}", flush=True)
+                        response = await asyncio.wait_for(
+                            client.post(
+                                "/api/v1/chat",
+                                headers={
+                                    "Authorization": f"Bearer {create_access_token(user_ids[0])}"
+                                },
+                                json={
+                                    "message": case["question"],
+                                    "conversation_id": f"rag-context-{mode}-{uuid4().hex[:8]}",
+                                },
+                            ),
+                            timeout=180,
+                        )
+                        payload = response.json()
+                        answer = (payload.get("data") or {}).get("answer", "")
+                        report["http_cases"].append(
+                            {
+                                "mode": mode,
+                                "status_code": response.status_code,
+                                "response": payload,
+                                "retrieval_trace": list(traces),
+                                "answer_checks": checks(answer, case),
+                            }
+                        )
+                        save()
+            finally:
+                settings.AGENT_MODE = original_mode
     finally:
         user_knowledge_service.search = original_search
         try:
@@ -302,5 +354,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--only", nargs="+")
+    parser.add_argument("--http-only", action="store_true")
     args = parser.parse_args()
-    asyncio.run(evaluate(args.output.resolve(), args.only))
+    asyncio.run(evaluate(args.output.resolve(), args.only, http_only=args.http_only))
