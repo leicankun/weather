@@ -1,5 +1,7 @@
 # 测试
 
+单模式工具预算：`python -m pytest tests/unit/test_agent_tool_budget.py --no-db -o addopts= -q`；PostgreSQL 恢复回归 `tests/api/test_agent_tool_budget_recovery.py`。故意无限调用的模型替身通过真实图及普通/SSE 接口，验证逐工具项计数、批次超限不执行、错误调用消耗额度、正常收尾、会话隔离、检查点恢复与新一轮重置。计数边界见 [AGENT_TOOL_BUDGET.md](AGENT_TOOL_BUDGET.md)。
+
 日期约束回归：`python -m pytest tests/unit/test_temporal_context.py tests/unit/test_temporal_agent_graph.py --no-db -o addopts= -q`，覆盖冻结日期、改期/否定、按任务绑定多个日期、精确选择天气、缺失不回退、错误参数在 IO 前拦截、普通/SSE 草稿隔离及核验误放行的确定性日期拒绝。真实 PostgreSQL 补充 `tests/api/test_temporal_history.py` 与 `tests/api/test_checkpoints.py`，验证原消息日期基准、跨日恢复和工具不重复执行。流程见 [AGENT_DATES.md](AGENT_DATES.md)。
 
 RAG 工具完整证据回归：`python -m pytest tests/unit/test_rag_tool_context.py tests/unit/test_multi_agent.py tests/unit/test_answer_verification.py --no-db -o addopts= -q`。覆盖公共/私人实际工具经过单/多图后保留块尾事实、来源与换行、核验完整证据、整体预算省略和 MCP 文本解包。真实图与聊天 HTTP 验收使用 `app.scripts.evaluate_rag_errors`，会调用已配置真实模型、创建并清理合成资料；命令与结果见 [RAG_TOOL_CONTEXT.md](RAG_TOOL_CONTEXT.md)。

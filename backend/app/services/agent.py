@@ -170,6 +170,9 @@ class AgentState(TypedDict):
     history: list[dict]
     temporal_context: dict
     verification: dict
+    tool_call_count: int
+    tool_call_limit: int
+    tool_limit_exceeded: bool
     messages: Annotated[list, add_messages]
     intent: str
     answer: str
@@ -272,10 +275,12 @@ async def _agent_node(state: AgentState) -> dict:
     """LLM 决策节点：绑定工具（按意图），让模型决定调用工具/反问/直答。"""
     llm = get_llm()
     intent = state.get("intent", "other")
+    used = state.get("tool_call_count", 0)
+    limit = state.get("tool_call_limit", settings.AGENT_MAX_TOOL_CALLS)
 
     if intent in TOOL_INTENTS:
         tools = await _get_all_tools()
-        llm_with_tools = llm.bind_tools(tools)
+        llm_with_tools = llm.bind_tools(tools) if used < limit else llm
         system = GENERATE_SYSTEM_PROMPT
     else:
         llm_with_tools = llm
@@ -284,6 +289,11 @@ async def _agent_node(state: AgentState) -> dict:
     if state.get("memory_context"):
         system += "\n" + state["memory_context"]
     system += temporal_prompt(state.get("temporal_context") or {})
+    system += (
+        f"\n本轮最多调用 {limit} 次工具，已使用 {used} 次；"
+        "一个批次中的每个工具调用分别计数，报错和参数校验失败也计数。"
+        "剩余额度不足时不要继续调用工具，应根据已有证据回答并说明未完成部分。"
+    )
     messages = state["messages"]
     try:
         resp = await llm_with_tools.ainvoke([("system", system), *messages])
@@ -306,10 +316,46 @@ def _should_continue(state: AgentState) -> str:
     """路由：最后一条消息若含 tool_calls 则执行工具，否则结束。"""
     last = state["messages"][-1]
     if getattr(last, "tool_calls", None):
-        return "tools"
+        return "reserve_tools"
     if _needs_date_verification(state):
         return "verify_dates"
     return END
+
+
+async def _reserve_tool_calls(state: AgentState) -> dict:
+    """Reserve the whole batch before IO; parallel calls cannot race the budget.
+
+    This is a separate checkpointed node: resuming the tools node reuses its
+    reservation, while a new model tool-call batch must reserve again.
+    """
+    count = state.get("tool_call_count", 0)
+    limit = state.get("tool_call_limit", settings.AGENT_MAX_TOOL_CALLS)
+    requested = len(state["messages"][-1].tool_calls)
+    if count + requested > limit:
+        return {"tool_limit_exceeded": True, "tool_call_limit": limit}
+    return {
+        "tool_call_count": count + requested,
+        "tool_call_limit": limit,
+        "tool_limit_exceeded": False,
+    }
+
+
+def _after_tool_reservation(state: AgentState) -> str:
+    return "handle_tool_limit" if state.get("tool_limit_exceeded") else "tools"
+
+
+def tool_limit_answer(limit: int) -> str:
+    return f"本次查询已触发执行次数上限（{limit} 次），已停止继续查询。请缩小问题范围后重试。"
+
+
+async def _handle_tool_limit(state: AgentState) -> dict:
+    """Resolve every rejected tool-call ID and terminate without another LLM call."""
+    answer = tool_limit_answer(state.get("tool_call_limit", settings.AGENT_MAX_TOOL_CALLS))
+    messages = [
+        ToolMessage(content=answer, tool_call_id=call["id"], name=call["name"], status="error")
+        for call in state["messages"][-1].tool_calls
+    ]
+    return {"answer": answer, "messages": [*messages, AIMessage(content=answer)]}
 
 
 def _needs_date_verification(state: dict) -> bool:
@@ -390,6 +436,8 @@ async def _build_graph(checkpointer=None):
     graph.add_node("classify_intent", _classify_intent)
     graph.add_node("agent", _agent_node)
     graph.add_node("tools", ToolNode(tools, awrap_tool_call=_guard_date_call))
+    graph.add_node("reserve_tools", _reserve_tool_calls)
+    graph.add_node("handle_tool_limit", _handle_tool_limit)
     graph.add_node("verify_dates", _verify_dates)
     graph.add_node("handle_error", _handle_error)
     approval_service.add_nodes(graph)
@@ -404,8 +452,14 @@ async def _build_graph(checkpointer=None):
     graph.add_conditional_edges(
         "agent",
         _should_continue,
-        {"tools": "tools", "verify_dates": "verify_dates", END: END},
+        {"reserve_tools": "reserve_tools", "verify_dates": "verify_dates", END: END},
     )
+    graph.add_conditional_edges(
+        "reserve_tools",
+        _after_tool_reservation,
+        {"tools": "tools", "handle_tool_limit": "handle_tool_limit"},
+    )
+    graph.add_edge("handle_tool_limit", END)
     graph.add_edge("tools", "agent")
     graph.add_edge("verify_dates", END)
     graph.add_edge("handle_error", END)
@@ -447,6 +501,9 @@ def _build_initial_state(
         "history": history or [],
         "temporal_context": build_temporal_context(user_input, history),
         "verification": {},
+        "tool_call_count": 0,
+        "tool_call_limit": settings.AGENT_MAX_TOOL_CALLS,
+        "tool_limit_exceeded": False,
         "messages": messages,
         "memory_context": memory_context,
         "intent": "",
@@ -582,10 +639,12 @@ async def chat_stream(
             graph_input, stream_mode=["messages", "updates"], **kwargs
         ):
             if mode == "updates":
-                for name in ("agent", "verify_dates", "handle_error"):
+                for name in ("agent", "verify_dates", "handle_error", "handle_tool_limit"):
                     update = chunk.get(name) or {}
                     if update.get("answer"):
                         final_answer = update["answer"]
+                        if name == "handle_tool_limit" and not buffered:
+                            yield {"type": "token", "content": final_answer}
                 continue
             msg_chunk = chunk[0] if isinstance(chunk, tuple) else chunk
             meta = chunk[1] if isinstance(chunk, tuple) else {}

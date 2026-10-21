@@ -8,6 +8,8 @@ Vue 页面 → api/*.js → FastAPI routers → services / skills → PostgreSQL
 
 AI 对话 → agent.py（single）或 multi_agent.py（multi）→ LangChain 模型工具调用 → MCP 公共工具 / 本地用户工具 → SSE 返回前端。默认 single，AGENT_MODE=multi 启用领域编排。
 
+单模式每轮工具调用默认最多 8 项（`AGENT_MAX_TOOL_CALLS`），在业务 IO 前按整批预留，错误调用也计数，超限返回停止提示。计数及本轮上限随检查点保存，新一轮重置；配置与恢复边界见 [AGENT_TOOL_BUDGET.md](AGENT_TOOL_BUDGET.md)。
+
 单/多模式共用上海时区日期上下文，按任务传递明确日期，并在工具执行前校验 `target_date`。穿搭、路线、天气和行程按目标日处理，缺失预报明确说明；单模式的日期工具回答也经过证据核验，涉及日期的 SSE 等图完成后发送最终答案。历史相对日期按原消息发送日解析，检查点恢复保留本轮锚点。契约、支持范围与限制见 [AGENT_DATES.md](AGENT_DATES.md)。
 
 多智能体专业领域回答新增核验：并行领域工具证据合并，多领域先汇总、单领域跳过汇总，再交给独立 `verify` 节点核对问题与原始证据。最多修正一次并复查，核验故障或仍不通过时不发布草稿。有专业领域的 SSE 等核验完成再发送完整答案；通用闲聊继续流式。核验复用默认模型，并非外部事实认证；详情见 [AGENT_VERIFICATION.md](AGENT_VERIFICATION.md)。

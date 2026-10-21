@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     # 默认 single：新架构上线的第一步是"能一键回退"，
     # 出问题改一行配置就能退回旧路径，不用重新发版。
     AGENT_MODE: str = "single"
+    # 单模式每轮逻辑工具调用项预算（一个批次含多个工具时逐项计数）。
+    AGENT_MAX_TOOL_CALLS: int = Field(default=8, ge=1, le=100)
 
     # 登录文本会话的图状态与人工审批；必须先运行 Alembic upgrade head。
     CHECKPOINT_ENABLED: bool = True
