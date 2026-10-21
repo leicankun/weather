@@ -5,6 +5,7 @@
 验证**编排逻辑**本身（评分融合、排序、天气提示、异常兜底）。
 """
 
+from datetime import date
 from types import SimpleNamespace
 from typing import ClassVar
 
@@ -77,6 +78,7 @@ def patch_deps(monkeypatch):
             raise RuntimeError("天气服务挂了")
         return Ctl.weather
 
+    monkeypatch.setattr(rp, "shanghai_today", lambda: date(2026, 9, 14))
     monkeypatch.setattr(rp.amap_client, "plan_route", fake_plan_route)
     monkeypatch.setattr(rp, "fetch_weather", fake_fetch_weather)
     return Ctl

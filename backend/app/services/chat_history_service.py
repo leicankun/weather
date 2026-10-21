@@ -20,12 +20,22 @@ from app.models.chat_message import ChatMessage
 from app.models.chat_summary import ChatSummary
 from app.models.checkpoint import AgentCheckpointThread
 from app.services import checkpoint_service
+from app.services.temporal_context import CN
 
 # 拼进多轮上下文的历史条数（取最近 N 条消息，超出截断）
 HISTORY_LIMIT = 10
 
 # 会话列表扫描的原始消息上限（用于在内存中分组，避免复杂 SQL 聚合）
 CONVERSATION_SCAN_LIMIT = 500
+
+
+def context_message(row: ChatMessage) -> dict[str, str]:
+    """Internal context keeps the source day for relative user dates."""
+    return {
+        "role": row.role,
+        "content": row.content,
+        "date_reference": row.created_at.astimezone(CN).date().isoformat(),
+    }
 
 
 async def lock_conversation(db: AsyncSession, user_id: int, conversation_id: str) -> None:
@@ -114,7 +124,7 @@ async def get_recent_history(
         rows = (await s.execute(stmt)).scalars().all()
         # 反转为时间正序
         rows = list(reversed(rows))
-        return [{"role": r.role, "content": r.content} for r in rows]
+        return [context_message(r) for r in rows]
 
     if owns_db:
         async with session as s:

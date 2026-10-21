@@ -152,7 +152,10 @@ async def test_真实图仅发布复核后的答案并合并工具证据(monkeyp
     assert first["memory_context"] == "用户常住海珠区"
     records = {record["tool"]: record for record in first["tool_evidence"]}
     assert "21.6~32.6" in records["get_forecast"]["output"]
-    assert json.loads(records["get_forecast"]["arguments"]) == {"city": "广州"}
+    assert json.loads(records["get_forecast"]["arguments"]) == {
+        "city": "广州",
+        "target_date": first["temporal_context"]["dates"][0],
+    }
     if parallel:
         assert set(records) == {"get_forecast", "recommend_outfit"}
         # 原始工具消息仍各域私有；仅验证节点拿到两域证据。

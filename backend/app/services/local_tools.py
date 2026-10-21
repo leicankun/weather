@@ -46,7 +46,7 @@ async def search_my_plans(query: str, top_k: int = 5) -> str:
 
 
 @tool
-async def check_itinerary_weather(query: str) -> str:
+async def check_itinerary_weather(query: str, target_date: str | None = None) -> str:
     """查询当前登录用户某天的行程安排，并结合当天天气给出出行提醒与推荐。
 
     适用场景：用户问"明天有什么安排""后天要注意什么""我的行程当天天气如何"等。
@@ -54,6 +54,7 @@ async def check_itinerary_weather(query: str) -> str:
     再查当天真实天气，返回行程+天气的组合信息供生成提醒。
 
     Args:
+        target_date: 目标日期 YYYY-MM-DD；有明确日期时必须传入。
         query: 用户关于行程/日期的提问，如"明天有什么安排，要注意什么"。
     """
     user_id = get_current_user_id()
@@ -61,13 +62,13 @@ async def check_itinerary_weather(query: str) -> str:
         return "当前未登录，无法查询行程。请先登录。"
 
     try:
-        return await reminder.run(user_id, query)
+        return await reminder.run(user_id, query, target_date=target_date)
     except Exception as exc:  # noqa: BLE001
         return f"行程查询失败：{exc}"
 
 
 @tool
-async def plan_trip(query: str) -> str:
+async def plan_trip(query: str, target_date: str | None = None) -> str:
     """根据出行需求自动排一份完整行程（含天气规避）。
 
     适用场景：用户说"周末想去广州玩两天""帮我排个三日游""怎么安排比较好"。
@@ -75,12 +76,13 @@ async def plan_trip(query: str) -> str:
     **下雨或高温的日期不会安排户外活动**（生成后会做一次审计纠正）。
 
     Args:
+        target_date: 出发日期 YYYY-MM-DD；有明确日期时必须传入。
         query: 用户的出行需求，如"周末想去广州玩两天，喜欢美食和拍照"。
     """
     if not query or not query.strip():
         return "请说明想去哪、几天，例如「周末想去广州玩两天」。"
     try:
-        return await planner.run(query.strip())
+        return await planner.run(query.strip(), target_date=target_date)
     except Exception as exc:  # noqa: BLE001 排程失败要让用户看到原因而不是空白
         return f"排行程失败：{exc}"
 

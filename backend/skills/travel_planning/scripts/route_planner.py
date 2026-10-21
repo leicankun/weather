@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.services import amap_client
+from app.services.temporal_context import date_header, date_metadata, iso_date, shanghai_today
 from app.services.weather_service import fetch_weather
 
 WEIGHT_TIME = 0.4
@@ -50,9 +51,11 @@ def weather_score(
     return max(0.0, min(1.0, score))
 
 
-async def run(origin: str, destination: str, city: str | None = None) -> str:
+async def run(
+    origin: str, destination: str, city: str | None = None, target_date: str | None = None
+) -> str:
     """出行规划主入口，返回结构化文本。"""
-    data = await plan_structured(origin, destination, city)
+    data = await plan_structured(origin, destination, city, target_date=target_date)
     if data.get("error"):
         return data["error"]
     if data.get("hint"):
@@ -66,19 +69,24 @@ async def run(origin: str, destination: str, city: str | None = None) -> str:
     precip = plan["weather"].get("precip")
 
     lines = [
-        f"从「{plan['origin']}」到「{plan['destination']}」的出行方案（共 {len(scored)} 套，按综合评分排序）："
+        date_header(plan["date_context"]),
+        f"从「{plan['origin']}」到「{plan['destination']}」的出行方案（共 {len(scored)} 套，按综合评分排序）：",
     ]
+    lines.append("路线耗时与费用为当前查询的参考估算，不能保证目标日的班次、路况或价格。")
+    if plan["weather_status"] == "unavailable":
+        lines.append(f"{plan['effective_date']} 暂无该日天气预报，评分未计入天气因素。")
     if weather_desc:
         lines.append(
-            f"当前天气参考：{weather_desc}"
+            f"{plan['effective_date']} 天气参考：{weather_desc}"
             + (f"，{temp_min}~{temp_max}°C" if temp_min is not None else "")
             + (f"，降水 {precip}mm" if precip else "")
         )
 
     for i, r in enumerate(scored, 1):
+        weather_rating = r["weather_score"] if r["weather_score"] is not None else "未计入"
         lines.append(
             f"{i}. 【{r['mode']}】耗时 {r['duration_min']} 分钟 / 距离 {r['distance_km']}km / 费用约 {r['cost']} 元"
-            f"（综合评分 {r['total_score']}，时间 {r['time_score']} / 费用 {r['cost_score']} / 天气 {r['weather_score']}）"
+            f"（综合评分 {r['total_score']}，时间 {r['time_score']} / 费用 {r['cost_score']} / 天气 {weather_rating}）"
         )
         if r.get("detail"):
             lines.append(f"   {r['detail']}")
@@ -100,6 +108,7 @@ async def plan_structured(
     city: str | None = None,
     origin_point: dict[str, Any] | None = None,
     destination_point: dict[str, Any] | None = None,
+    target_date: str | None = None,
 ) -> dict[str, Any]:
     """出行规划结构化入口，返回可直接用于前端渲染的 dict。
 
@@ -112,6 +121,7 @@ async def plan_structured(
       "error"?: str, "hint"?: str
     }
     """
+    target = iso_date(target_date) if target_date else shanghai_today().isoformat()
     if not origin or not destination:
         return {"error": "请提供出发地和目的地，例如「从广州南站到广州塔怎么走」。"}
 
@@ -124,13 +134,15 @@ async def plan_structured(
     # 天气
     weather_desc = ""
     temp_min = temp_max = precip = None
+    matched_date = None
     try:
         bundle = await fetch_weather(city or "广州")
-        if bundle.daily:
-            today = bundle.daily[0]
-            weather_desc = today.weather_desc or ""
-            temp_min, temp_max = today.temp_min, today.temp_max
-            precip = today.precipitation_sum
+        daily = next((day for day in bundle.daily if day.date == target), None)
+        if daily:
+            matched_date = daily.date
+            weather_desc = daily.weather_desc or ""
+            temp_min, temp_max = daily.temp_min, daily.temp_max
+            precip = daily.precipitation_sum
     except Exception:  # noqa: BLE001
         pass
 
@@ -144,14 +156,18 @@ async def plan_structured(
     for r in routes:
         ts = time_score(r["duration_min"], max_dur)
         cs = cost_score(r["cost"], max_cost)
-        ws = weather_score(weather_desc, temp_min, temp_max, precip)
-        total = WEIGHT_TIME * ts + WEIGHT_COST * cs + WEIGHT_WEATHER * ws
+        ws = weather_score(weather_desc, temp_min, temp_max, precip) if matched_date else None
+        total = (
+            (WEIGHT_TIME * ts + WEIGHT_COST * cs + WEIGHT_WEATHER * ws)
+            if ws is not None
+            else (WEIGHT_TIME * ts + WEIGHT_COST * cs) / (WEIGHT_TIME + WEIGHT_COST)
+        )
         scored.append(
             {
                 **r,
                 "time_score": round(ts, 2),
                 "cost_score": round(cs, 2),
-                "weather_score": round(ws, 2),
+                "weather_score": round(ws, 2) if ws is not None else None,
                 "total_score": round(total, 3),
             }
         )
@@ -159,6 +175,8 @@ async def plan_structured(
     scored.sort(key=lambda r: r["total_score"], reverse=True)
 
     return {
+        **date_metadata(target, matched_date),
+        "date_context": date_metadata(target, matched_date),
         "origin": plan.get("origin", origin),
         "destination": plan.get("destination", destination),
         "weather": {

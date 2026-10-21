@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import date
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -14,7 +15,13 @@ from app.core.security import create_access_token
 from app.models.chat_message import ChatMessage
 from app.models.checkpoint import AgentCheckpointThread
 from app.models.user import User
-from app.services import agent, chat_history_service, checkpoint_service, multi_agent
+from app.services import (
+    agent,
+    chat_history_service,
+    checkpoint_service,
+    multi_agent,
+    temporal_context,
+)
 from tests.api import test_chat_summary as summary_tests
 from tests.api import test_memory as memory_tests
 
@@ -117,11 +124,15 @@ async def test_resume_after_tool_step_and_idempotent_completion(
     stream,
 ):
     monkeypatch.setattr(settings, "AGENT_MODE", "single")
+    monkeypatch.setattr(temporal_context, "shanghai_today", lambda: date(2026, 10, 21))
+    review_model = summary_tests.ContextModel(messages=iter(()))
+    monkeypatch.setattr(agent, "get_llm", lambda: review_model)
     calls = {"tool": 0, "fail": True}
 
     @tool
-    async def get_weather():
+    async def get_weather(target_date: str | None = None):
         """Return test weather."""
+        assert target_date == "2026-10-21"
         calls["tool"] += 1
         return "23度"
 
@@ -168,6 +179,8 @@ async def test_resume_after_tool_step_and_idempotent_completion(
     snapshot = await state(owner, "crash", "single")
     assert snapshot.next == ("agent",)
     assert snapshot.values["messages"][-1].type == "tool"
+    assert snapshot.values["temporal_context"]["dates"] == ["2026-10-21"]
+    monkeypatch.setattr(temporal_context, "shanghai_today", lambda: date(2026, 10, 22))
     blocked = await client.post(
         "/api/v1/chat", headers=auth_headers, json={"message": "新问题", "conversation_id": "crash"}
     )

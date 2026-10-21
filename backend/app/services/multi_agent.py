@@ -46,17 +46,16 @@ from app.services import approval_service, checkpoint_service
 from app.services.agent_metrics import agent_metrics
 from app.services.agent_registry import DOMAINS, route_domains
 from app.services.answer_verification import (
-    VERIFICATION_FAILED,
-    VERIFICATION_UNAVAILABLE,
-    VERIFY_SYSTEM_PROMPT,
-    AnswerReview,
-    VerificationResult,
-    build_verification_prompt,
     evidence_record,
 )
-from app.services.llm_client import ainvoke_json, extract_json, get_llm
+from app.services.llm_client import ainvoke_json, get_llm
 from app.services.local_tools import get_local_tools
 from app.services.mcp_client import get_mcp_tools
+from app.services.temporal_context import (
+    build_temporal_context,
+    guard_tool_date,
+    temporal_prompt,
+)
 from app.services.user_context import reset_current_user_id, set_current_user_id
 
 logger = logging.getLogger(__name__)
@@ -147,6 +146,7 @@ class MultiAgentState(TypedDict):
     """多智能体图的状态。"""
 
     run_id: str
+    temporal_context: dict
     question: str
     memory_context: str
     history: list[dict[str, str]]
@@ -193,14 +193,18 @@ def _add_usage(run: DomainRun, message: Any) -> None:
     run.completion_tokens += int(usage.get("output_tokens", 0) or 0)
 
 
-async def _invoke_tool(tools: list, call: dict) -> str:
+async def _invoke_tool(tools: list, call: dict, temporal_context: dict | None = None) -> str:
     """执行一个工具调用，失败返回可读错误（不抛异常）。"""
     name = call.get("name", "")
     tool = next((item for item in tools if getattr(item, "name", "") == name), None)
     if tool is None:
         return f"工具 {name} 不可用，请改用你手上的其他工具。"
     try:
-        result = await tool.ainvoke(call.get("args") or {})
+        args = call.get("args") or {}
+        if temporal_context is not None:
+            args = guard_tool_date(name, args, temporal_context)
+            call["args"] = args
+        result = await tool.ainvoke(args)
         if isinstance(result, list) and all(
             isinstance(block, dict) and block.get("type") == "text" for block in result
         ):
@@ -241,19 +245,24 @@ async def run_domain_agent(
     *,
     history: list[dict[str, str]] | None = None,
     memory_context: str = "",
+    temporal_context: dict | None = None,
 ) -> DomainRun:
     """跑一个领域 Agent 的 ReAct 循环（工具 → 再推理），返回结果与开销。
 
     max_steps 是**硬上限**：模型偶尔会反复调用同一个工具，
     没有上限就会一直烧 token 直到超时。
     """
+    temporal_context = temporal_context or build_temporal_context(question, history)
     domain = DOMAINS[key]
     run = DomainRun()
     llm = get_llm()
     bound = llm.bind_tools(tools) if tools else llm
 
     messages = _messages_with_history(
-        domain.prompt + SHARED_RULES, question, history, memory_context
+        domain.prompt + SHARED_RULES + temporal_prompt(temporal_context),
+        question,
+        history,
+        memory_context,
     )
 
     for _ in range(max_steps + 1):
@@ -277,7 +286,7 @@ async def run_domain_agent(
 
         for call in calls:
             run.tools_used.append(call.get("name", ""))
-            output = await _invoke_tool(tools, call)
+            output = await _invoke_tool(tools, call, temporal_context)
             run.tool_calls += 1
             run.evidence.append(
                 evidence_record(call.get("name", ""), call.get("args") or {}, output)
@@ -344,9 +353,13 @@ async def _supervisor_node(state: MultiAgentState) -> dict:
     若调用方已算好领域（流式路径为了决定转发哪个节点会先算一次），
     直接用现成结果，避免重复一次 LLM 路由调用。
     """
-    if state.get("domains") is not None:
-        return {"domains": state["domains"]}
-    return {"domains": await plan_domains(state["question"], state.get("history"))}
+    context = state.get("temporal_context") or build_temporal_context(
+        state["question"], state.get("history")
+    )
+    domains = state.get("domains")
+    if domains is None:
+        domains = await plan_domains(state["question"], state.get("history"))
+    return {"domains": domains, "temporal_context": context}
 
 
 # 领域 → 旧意图标签（前端按旧词表展示 intent，映射回去以免破坏兼容）
@@ -416,6 +429,7 @@ def _make_domain_node(key: str):
                 tools,
                 history=state.get("history"),
                 memory_context=state.get("memory_context", ""),
+                temporal_context=state.get("temporal_context"),
             )
         except Exception as exc:
             if checkpoint_service.current():
@@ -487,7 +501,7 @@ async def _synthesize_node(state: MultiAgentState) -> dict:
     try:
         resp = await llm.ainvoke(
             _messages_with_history(
-                SYNTHESIZE_SYSTEM_PROMPT,
+                SYNTHESIZE_SYSTEM_PROMPT + temporal_prompt(state.get("temporal_context") or {}),
                 build_merge_prompt(state["question"], answers),
                 state.get("history"),
                 state.get("memory_context", ""),
@@ -504,52 +518,9 @@ async def _synthesize_node(state: MultiAgentState) -> dict:
 
 
 async def _verify_node(state: MultiAgentState) -> dict:
-    """核对草稿；最多一次修正和一次复查，不通过或故障都不发布原稿。"""
-    draft = state.get("answer") or fallback_merge(state.get("domain_answers") or {})
-    metrics: dict[str, Any] = {}
-    issues: list[str] = []
-    for check in range(1, 3):
-        try:
-            resp = await get_llm().ainvoke(
-                [
-                    SystemMessage(content=VERIFY_SYSTEM_PROMPT),
-                    HumanMessage(
-                        content=build_verification_prompt(
-                            state if check == 1 else {**state, "domain_answers": {}}, draft
-                        )
-                    ),
-                ]
-            )
-            metrics = _merge_metrics(metrics, _usage_of(resp))
-            content = resp.content if isinstance(resp.content, str) else str(resp.content)
-            review = AnswerReview.model_validate(extract_json(content))
-            if review.passed and draft.strip() and len(draft) <= 12000:
-                return {
-                    "answer": draft,
-                    "verification": VerificationResult(
-                        status="passed" if check == 1 else "corrected", checks=check, issues=issues
-                    ).model_dump(),
-                    "metrics": metrics,
-                }
-            issues = list(dict.fromkeys([*issues, *review.issues]))
-            draft = review.revised_answer.strip()
-        except Exception as exc:  # noqa: BLE001 核验失败不能泄漏未验证草稿
-            logger.warning("回答核验失败: %s", type(exc).__name__)
-            # 模型调用异常仍计为一次尝试；解析异常已记录该响应的用量。
-            if int(metrics.get("llm_calls", 0)) < check:
-                metrics = _merge_metrics(metrics, {"llm_calls": 1})
-            return {
-                "answer": VERIFICATION_UNAVAILABLE,
-                "verification": VerificationResult(
-                    status="unverified", checks=check, issues=issues
-                ).model_dump(),
-                "metrics": metrics,
-            }
-    return {
-        "answer": VERIFICATION_FAILED,
-        "verification": VerificationResult(status="failed", checks=2, issues=issues).model_dump(),
-        "metrics": metrics,
-    }
+    from app.services.answer_verification import verify_draft
+
+    return await verify_draft(state, get_llm)
 
 
 def stream_source_node(domains: list[str]) -> str:
@@ -584,6 +555,7 @@ async def chat_multi_stream(
 
     initial: MultiAgentState = {
         "question": question,
+        "temporal_context": build_temporal_context(question, history),
         "history": history or [],
         "memory_context": memory_context,
         "domains": domains,
@@ -728,6 +700,7 @@ async def chat_multi(
     """
     initial: MultiAgentState = {
         "question": question,
+        "temporal_context": build_temporal_context(question, history),
         "history": history or [],
         "memory_context": memory_context,
         "domains": None,

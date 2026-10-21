@@ -18,6 +18,7 @@ from app.models.news import News
 from app.services import rag_service, web_search_service
 from app.services.city_dict import all_supported_cities, lookup_city
 from app.services.knowledge_tool_context import format_knowledge_context
+from app.services.temporal_context import date_header, date_metadata, iso_date
 from app.services.weather_service import fetch_weather, weather_to_text
 from skills.outfit_recommend.scripts import outfit_engine
 from skills.travel_planning.scripts import route_planner
@@ -26,11 +27,13 @@ from skills.travel_planning.scripts import route_planner
 _SUPPORTED_CITIES = "、".join(all_supported_cities())
 
 
-async def get_weather(city: str) -> str:
+async def get_weather(city: str, target_date: str | None = None) -> str:
     """查询指定城市实时天气。
 
     参数 city 支持中文名、拼音、常见别名（如"广州"/"gz"/"广州塔"）。
     """
+    if target_date:
+        return await get_forecast(city, days=1, target_date=target_date)
     if not city or not city.strip():
         city = "广州"
     # 校验城市是否可解析（未知城市给出友好提示）
@@ -41,11 +44,12 @@ async def get_weather(city: str) -> str:
     return weather_to_text(bundle)
 
 
-async def get_forecast(city: str, days: int = 3) -> str:
+async def get_forecast(city: str, days: int = 3, target_date: str | None = None) -> str:
     """查询指定城市未来 N 天天气预报（1~7 天）。
 
     参数 days 越界时自动夹取到 1~7。
     """
+    target = iso_date(target_date) if target_date else None
     days = max(1, min(7, int(days)))
     if not city or not city.strip():
         city = "广州"
@@ -53,9 +57,24 @@ async def get_forecast(city: str, days: int = 3) -> str:
         return f"抱歉，暂不支持查询「{city}」的天气。当前支持：{_SUPPORTED_CITIES}。"
 
     bundle = await fetch_weather(city)
-    # 截取前 days 天
-    lines = [f"{city} 未来 {days} 天预报："]
-    for d in bundle.daily[:days]:
+    daily = bundle.daily
+    if target:
+        from datetime import date, timedelta
+
+        end = (date.fromisoformat(target) + timedelta(days=days)).isoformat()
+        daily = [day for day in daily if target <= day.date < end]
+        lines = [
+            date_header(
+                date_metadata(target, target if any(day.date == target for day in daily) else None)
+            ),
+            f"{city} 从 {target} 起 {days} 天预报：",
+        ]
+        if not any(day.date == target for day in daily):
+            lines.append(f"{target} 暂无该日天气预报，不得用其他日期替代。")
+    else:
+        daily = daily[:days]
+        lines = [f"{city} 预报（含今天，按下列具体日期使用）："]
+    for d in daily:
         line = f"- {d.date}：{d.weather_desc or '未知'}，{d.temp_min}~{d.temp_max}°C"
         if d.precipitation_sum:
             line += f"，降水 {d.precipitation_sum}mm"
@@ -140,15 +159,19 @@ async def web_search(query: str, max_results: int = 5) -> str:
     return await web_search_service.search(query, max_results)
 
 
-async def plan_travel_route(origin: str, destination: str, city: str = "广州") -> str:
+async def plan_travel_route(
+    origin: str, destination: str, city: str = "广州", target_date: str | None = None
+) -> str:
     """出行规划：从出发地到目的地，返回多套出行方案，融合时间/费用/天气三维评分并带天气提示。
 
     适用"从广州南站到广州塔怎么走""去白云山坐地铁还是打车"等。
     """
-    return await route_planner.run(origin, destination, city)
+    return await route_planner.run(origin, destination, city, target_date=target_date)
 
 
-async def recommend_outfit(city: str = "广州", scene: str = "", preference: str = "") -> str:
+async def recommend_outfit(
+    city: str = "广州", scene: str = "", preference: str = "", target_date: str | None = None
+) -> str:
     """穿搭推荐：结合天气（温度/降水/风）+ 活动场景 + 用户偏好，生成贴合场景的穿搭建议。
 
     适用"明天爬山穿什么""下雨天逛街穿什么""我怕冷，明天怎么穿"等。
@@ -156,4 +179,4 @@ async def recommend_outfit(city: str = "广州", scene: str = "", preference: st
     参数 scene 可选：爬山/逛街/夜游/商务/通勤/露营/骑行/观景/亲子/摄影；
     参数 preference 可选：怕冷/怕热/正式/运动/休闲/简约/时尚。
     """
-    return await outfit_engine.run(city, scene or None, preference or None)
+    return await outfit_engine.run(city, scene or None, preference or None, target_date=target_date)

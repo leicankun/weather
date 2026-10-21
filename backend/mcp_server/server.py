@@ -36,24 +36,26 @@ mcp = FastMCP(
 
 
 @mcp.tool()
-async def get_weather(city: str) -> str:
+async def get_weather(city: str, target_date: str | None = None) -> str:
     """查询指定城市的实时天气（当前温度、体感、湿度、风向风力、降水、能见度等）。
 
     Args:
         city: 城市名，支持中文名/拼音/别名，如"广州"、"北京"、"gz"、"上海"。
+        target_date: 目标日期 YYYY-MM-DD；传入时查询该日预报，留空查询实时天气。
     """
-    return await tools.get_weather(city)
+    return await tools.get_weather(city, target_date=target_date)
 
 
 @mcp.tool()
-async def get_forecast(city: str, days: int = 3) -> str:
+async def get_forecast(city: str, days: int = 3, target_date: str | None = None) -> str:
     """查询指定城市未来 N 天（1~7 天）的天气预报，含温度区间、天气现象、降水与预警。
 
     Args:
         city: 城市名，支持中文名/拼音/别名。
         days: 预报天数，1~7 之间的整数，默认 3 天。
+        target_date: 起始日期 YYYY-MM-DD；指定日期时必须传入，留空从今天起（含今天）。
     """
-    return await tools.get_forecast(city, days)
+    return await tools.get_forecast(city, days, target_date=target_date)
 
 
 @mcp.tool()
@@ -94,7 +96,9 @@ async def web_search(query: str, max_results: int = 5) -> str:
 
 
 @mcp.tool()
-async def plan_travel_route(origin: str, destination: str, city: str = "广州") -> str:
+async def plan_travel_route(
+    origin: str, destination: str, city: str = "广州", target_date: str | None = None
+) -> str:
     """出行规划：从出发地到目的地，返回多套出行方案（驾车/公交/步行/骑行等），
     融合时间、费用、天气三个维度综合评分排序，并附带天气提示。
 
@@ -102,12 +106,15 @@ async def plan_travel_route(origin: str, destination: str, city: str = "广州")
         origin: 出发地，如"广州南站"。
         destination: 目的地，如"广州塔"。
         city: 所在城市，默认"广州"。
+        target_date: 出行日期 YYYY-MM-DD，用于选择当天预报；路线为当前查询的参考估算。
     """
-    return await tools.plan_travel_route(origin, destination, city)
+    return await tools.plan_travel_route(origin, destination, city, target_date=target_date)
 
 
 @mcp.tool()
-async def recommend_outfit(city: str = "广州", scene: str = "", preference: str = "") -> str:
+async def recommend_outfit(
+    city: str = "广州", scene: str = "", preference: str = "", target_date: str | None = None
+) -> str:
     """穿搭推荐：结合天气（温度/降水/风）+ 活动场景 + 用户偏好，生成贴合场景的穿搭建议。
 
     适用"明天爬山穿什么""下雨天逛街穿什么""我怕冷怎么穿"等。
@@ -116,8 +123,9 @@ async def recommend_outfit(city: str = "广州", scene: str = "", preference: st
         city: 城市，默认"广州"。
         scene: 活动场景（爬山/逛街/夜游/商务/通勤/露营/骑行/观景/亲子/摄影），可留空。
         preference: 用户偏好（怕冷/怕热/正式/运动/休闲/简约/时尚），可留空。
+        target_date: 穿搭日期 YYYY-MM-DD；有明确日期时必须传入，无该日预报会明确说明。
     """
-    return await tools.recommend_outfit(city, scene, preference)
+    return await tools.recommend_outfit(city, scene, preference, target_date=target_date)
 
 
 def main() -> None:

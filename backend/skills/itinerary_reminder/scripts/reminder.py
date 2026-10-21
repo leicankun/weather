@@ -8,11 +8,16 @@
 
 from __future__ import annotations
 
-import re
-from datetime import date, timedelta
-
 from app.services import itinerary_service
 from app.services.city_dict import lookup_city
+from app.services.temporal_context import (
+    DateResolutionError,
+    date_header,
+    date_metadata,
+    iso_date,
+    resolve_date,
+    shanghai_today,
+)
 from app.services.weather_service import fetch_weather
 
 # 行程未写地点 / 地点无法解析城市时的默认城市
@@ -47,41 +52,27 @@ async def _weather_line(city: str, date_str: str) -> str:
 
 
 def parse_date_expression(text: str) -> str | None:
-    """从自然语言解析日期，返回 YYYY-MM-DD 或 None。"""
-    today = date.today()
-    if "大后天" in text:
-        return (today + timedelta(days=3)).isoformat()
-    if "后天" in text:
-        return (today + timedelta(days=2)).isoformat()
-    if "明天" in text or "明日" in text:
-        return (today + timedelta(days=1)).isoformat()
-    if "今天" in text or "今日" in text:
-        return today.isoformat()
-
-    m = re.search(r"(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})", text)
-    if m:
-        return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
-    m = re.search(r"(\d{1,2})月(\d{1,2})日?", text)
-    if m:
-        try:
-            d = date(today.year, int(m.group(1)), int(m.group(2)))
-            if d < today:
-                d = date(today.year + 1, int(m.group(1)), int(m.group(2)))
-            return d.isoformat()
-        except ValueError:
-            return None
-    return None
+    """Compatibility parser; run() validates unsupported/ambiguous dates separately."""
+    try:
+        target, _ = resolve_date(text)
+    except DateResolutionError:
+        return None
+    return target.isoformat() if target else None
 
 
-async def run(user_id: int, query: str) -> str:
+async def run(user_id: int, query: str, target_date: str | None = None) -> str:
     """行程天气提醒主入口。"""
-    date_str = parse_date_expression(query)
+    if target_date:
+        date_str = iso_date(target_date)
+    else:
+        target, _ = resolve_date(query)
+        date_str = target.isoformat() if target else None
 
     if date_str is None:
         items = await itinerary_service.get_itinerary_by_date(user_id)
         if not items:
             return "你还没有安排行程。可先添加行程，我会结合天气给你出行提醒。"
-        today = date.today().isoformat()
+        today = shanghai_today().isoformat()
         future = [it for it in items if it["date"] >= today]
         target = future or items
         date_str = target[0]["date"]
@@ -105,7 +96,10 @@ async def run(user_id: int, query: str) -> str:
 
     weather_text = "\n".join([await _weather_line(c, date_str) for c in cities])
 
-    lines = [header]
+    weather_available = any(
+        "暂无" not in line and "失败" not in line for line in weather_text.splitlines()
+    )
+    lines = [date_header(date_metadata(date_str, date_str if weather_available else None)), header]
     for it in items:
         line = f"- {it['start_time'] or '全天'} {it['title']}"
         if it["location"]:

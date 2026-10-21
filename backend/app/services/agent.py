@@ -28,7 +28,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated, TypedDict
 
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -38,6 +38,12 @@ from app.services import approval_service, checkpoint_service, llm_client, multi
 from app.services.llm_client import get_llm
 from app.services.local_tools import get_local_tools
 from app.services.mcp_client import get_mcp_tools
+from app.services.temporal_context import (
+    DateResolutionError,
+    build_temporal_context,
+    guard_tool_date,
+    temporal_prompt,
+)
 from app.services.user_context import reset_current_user_id, set_current_user_id
 
 logger = logging.getLogger(__name__)
@@ -160,6 +166,10 @@ class AgentState(TypedDict):
     """会话状态。messages 用 add_messages 做累加合并。"""
 
     run_id: str
+    question: str
+    history: list[dict]
+    temporal_context: dict
+    verification: dict
     messages: Annotated[list, add_messages]
     intent: str
     answer: str
@@ -208,12 +218,15 @@ def _strong_keyword_intent(text: str) -> str | None:
 async def _classify_intent(state: AgentState) -> dict:
     """意图识别节点：强关键词预判 > LLM 分类 > 弱关键词兜底。"""
     user_text = state["messages"][-1].content
+    context = state.get("temporal_context") or build_temporal_context(
+        user_text, state.get("history")
+    )
 
     # 1) 强关键词预判：高置信命中直接定意图，跳过 LLM 分类
     pre = _strong_keyword_intent(user_text)
     if pre:
         logger.info("强关键词预判命中: %s（用户：%s）", pre, user_text)
-        return {"intent": pre}
+        return {"intent": pre, "temporal_context": context}
 
     # 2) 未命中强词：调用 LLM 分类，失败则弱关键词兜底
     llm = get_llm()
@@ -245,7 +258,7 @@ async def _classify_intent(state: AgentState) -> dict:
         logger.warning("意图识别 LLM 调用失败，降级到关键词规则: %s", exc)
         intent = _keyword_intent(user_text)
     logger.info("识别意图: %s（用户：%s）", intent, user_text)
-    return {"intent": intent}
+    return {"intent": intent, "temporal_context": context}
 
 
 async def _get_all_tools() -> list:
@@ -270,6 +283,7 @@ async def _agent_node(state: AgentState) -> dict:
 
     if state.get("memory_context"):
         system += "\n" + state["memory_context"]
+    system += temporal_prompt(state.get("temporal_context") or {})
     messages = state["messages"]
     try:
         resp = await llm_with_tools.ainvoke([("system", system), *messages])
@@ -293,7 +307,63 @@ def _should_continue(state: AgentState) -> str:
     last = state["messages"][-1]
     if getattr(last, "tool_calls", None):
         return "tools"
+    if _needs_date_verification(state):
+        return "verify_dates"
     return END
+
+
+def _needs_date_verification(state: dict) -> bool:
+    context = state.get("temporal_context") or {}
+    return bool(context.get("dates") or context.get("unresolved")) and any(
+        isinstance(message, ToolMessage) for message in state.get("messages", [])
+    )
+
+
+async def _guard_date_call(request, execute):
+    """ToolNode interceptor: refuse a conflicting date before any business IO."""
+    call = request.tool_call
+    try:
+        args = guard_tool_date(
+            call["name"], call.get("args") or {}, request.state.get("temporal_context") or {}
+        )
+    except DateResolutionError as exc:
+        return ToolMessage(
+            content=f"日期校验未通过：{exc}",
+            name=call["name"],
+            tool_call_id=call["id"],
+            status="error",
+        )
+    result = await execute(request.override(tool_call={**call, "args": args}))
+    if isinstance(result, ToolMessage):
+        result.artifact = {"date_guard_arguments": args, "original_artifact": result.artifact}
+    return result
+
+
+async def _verify_dates(state: AgentState) -> dict:
+    from app.services.answer_verification import evidence_record, verify_draft
+
+    calls = {}
+    evidence = []
+    for message in state["messages"]:
+        for call in getattr(message, "tool_calls", []) or []:
+            calls[call["id"]] = call
+        if isinstance(message, ToolMessage):
+            call = calls.get(message.tool_call_id, {})
+            artifact = message.artifact if isinstance(message.artifact, dict) else {}
+            args = artifact.get("date_guard_arguments", call.get("args", {}))
+            content = message.content
+            if isinstance(content, list):
+                content = "\n".join(
+                    block.get("text", "") for block in content if isinstance(block, dict)
+                )
+            evidence.append(
+                evidence_record(call.get("name", message.name or ""), args, str(content))
+            )
+    review = await verify_draft(
+        {**state, "question": state.get("question") or "", "domain_evidence": {"single": evidence}},
+        get_llm,
+    )
+    return {"answer": review["answer"], "verification": review["verification"]}
 
 
 async def _handle_error(state: AgentState) -> dict:
@@ -319,7 +389,8 @@ async def _build_graph(checkpointer=None):
 
     graph.add_node("classify_intent", _classify_intent)
     graph.add_node("agent", _agent_node)
-    graph.add_node("tools", ToolNode(tools))
+    graph.add_node("tools", ToolNode(tools, awrap_tool_call=_guard_date_call))
+    graph.add_node("verify_dates", _verify_dates)
     graph.add_node("handle_error", _handle_error)
     approval_service.add_nodes(graph)
 
@@ -333,9 +404,10 @@ async def _build_graph(checkpointer=None):
     graph.add_conditional_edges(
         "agent",
         _should_continue,
-        {"tools": "tools", END: END},
+        {"tools": "tools", "verify_dates": "verify_dates", END: END},
     )
     graph.add_edge("tools", "agent")
+    graph.add_edge("verify_dates", END)
     graph.add_edge("handle_error", END)
 
     return graph.compile(checkpointer=checkpointer)
@@ -371,6 +443,10 @@ def _build_initial_state(
     messages.append(HumanMessage(content=user_input))
 
     return {
+        "question": user_input,
+        "history": history or [],
+        "temporal_context": build_temporal_context(user_input, history),
+        "verification": {},
         "messages": messages,
         "memory_context": memory_context,
         "intent": "",
@@ -498,17 +574,30 @@ async def chat_stream(
         intent_state = await _classify_intent(initial)
         final_intent = intent_state.get("intent", "chat")
         yield {"type": "intent", "intent": final_intent}
-        # 再流式生成：逐 token 推送，仅输出「agent 生成节点」的文本增量，
-        # 跳过 classify_intent 节点的输出（其内容是意图标签，不应作为答案推送）
-        async for chunk in ag.astream(graph_input, stream_mode="messages", **kwargs):
+        # Dated answers remain buffered until date/evidence verification finishes.
+        context = initial["temporal_context"]
+        buffered = bool(context.get("dates") or context.get("unresolved") or graph_input is None)
+        final_answer = ""
+        async for mode, chunk in ag.astream(
+            graph_input, stream_mode=["messages", "updates"], **kwargs
+        ):
+            if mode == "updates":
+                for name in ("agent", "verify_dates", "handle_error"):
+                    update = chunk.get(name) or {}
+                    if update.get("answer"):
+                        final_answer = update["answer"]
+                continue
             msg_chunk = chunk[0] if isinstance(chunk, tuple) else chunk
             meta = chunk[1] if isinstance(chunk, tuple) else {}
-            if meta.get("langgraph_node") != "agent":
+            if buffered or meta.get("langgraph_node") != "agent":
                 continue
             if isinstance(msg_chunk, AIMessageChunk):
                 piece = msg_chunk.content
                 if isinstance(piece, str) and piece:
                     yield {"type": "token", "content": piece}
+        if buffered and final_answer:
+            yield {"type": "token", "content": final_answer}
+
     except Exception as exc:
         if checkpoint_service.current():
             raise

@@ -188,7 +188,12 @@ class TestRunDomainAgent:
         assert run.llm_calls == 2
         assert run.answer == "今天广州 30℃ 晴"
         assert run.tools_used == ["get_weather"]
-        assert tool.calls == [{"city": "广州"}]
+        assert tool.calls == [
+            {
+                "city": "广州",
+                "target_date": multi_agent.build_temporal_context("明天天气")["dates"][0],
+            }
+        ]
 
     async def test_工具报错不中断回答(self, monkeypatch):
         tool = FakeTool("get_weather", raises="上游超时")

@@ -33,6 +33,14 @@ from app.services import amap_client, holiday_calendar
 from app.services.city_dict import all_supported_cities, lookup_city
 from app.services.district_dict import area_core, cities_of, match_area
 from app.services.llm_client import ainvoke_json
+from app.services.temporal_context import (
+    DateResolutionError,
+    date_header,
+    date_metadata,
+    iso_date,
+    resolve_date,
+    shanghai_today,
+)
 from app.services.weather_service import fetch_weather
 
 logger = logging.getLogger(__name__)
@@ -140,72 +148,12 @@ def _cn_to_int(text: str) -> int | None:
     return _CN_DIGITS.get(text)
 
 
-def _upcoming(ref: date, month: int, day: int) -> date | None:
-    """把「某月某日」落到不早于 ref 的最近一次（今年过了就算明年）。"""
-    for year in (ref.year, ref.year + 1):
-        try:
-            candidate = date(year, month, day)
-        except ValueError:  # 2 月 30 日这类不存在的日期
-            continue
-        if candidate >= ref:
-            return candidate
-    return None
-
-
 def parse_start_date(text: str, ref: date) -> tuple[date | None, str | None]:
-    """解析出发日期，返回 (日期, 命中的原词)；解析不出返回 (None, None)。
-
-    ref 是「今天」，用它把相对说法（明天/周末/下周）落成具体日期。
-
-    把命中的原词一并返回，是因为「默默换掉用户说的日期」和「默默换掉城市」
-    属于同一类错误：用户写了国庆，就该看到"已按国庆（10-01）排"，
-    而不是拿到一份从今天开始的行程，还以为 AI 没看懂他说的日期。
-    """
-    raw = (text or "").strip()
-    if not raw:
+    """Shared date parser; generate() refuses ambiguous/invalid explicit dates."""
+    try:
+        return resolve_date(text, ref)
+    except DateResolutionError:
         return None, None
-
-    for keyword in ("今天", "今日"):
-        if keyword in raw:
-            return ref, keyword
-    if "后天" in raw:
-        return ref + timedelta(days=2), "后天"
-    for keyword in ("明天", "明日"):
-        if keyword in raw:
-            return ref + timedelta(days=1), keyword
-
-    # 周末 → 最近的周六（今天就是周六则从今天算起）
-    saturday_offset = (5 - ref.weekday()) % 7
-    if "下周末" in raw:
-        return ref + timedelta(days=saturday_offset + 7), "下周末"
-    if "周末" in raw:
-        return ref + timedelta(days=saturday_offset), "周末"
-
-    # 下周X / 下个星期X → 先跳到下周一，再按星期几偏移
-    matched = re.search(r"下(?:个)?(?:周|星期)([一二三四五六日天])?", raw)
-    if matched:
-        next_monday = ref + timedelta(days=(7 - ref.weekday()) % 7 or 7)
-        weekday = matched.group(1)
-        if weekday:
-            return next_monday + timedelta(days=_WEEKDAYS[weekday]), matched.group(0)
-        return next_monday, matched.group(0)
-
-    # 明确写了几月几号
-    matched = re.search(r"(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]", raw)
-    if matched:
-        target = _upcoming(ref, int(matched.group(1)), int(matched.group(2)))
-        if target:
-            return target, matched.group(0)
-
-    # 节假日（国庆/中秋/春节…）交给 holiday_calendar：
-    # 农历节日（中秋/春节/端午）无法用固定公历日期表示，只能换算；
-    # 顺带把"今年已过就落到明年"也由它处理。
-    resolved = holiday_calendar.resolve(raw, ref)
-    if resolved:
-        festival, start = resolved
-        return start, festival.name
-
-    return None, None
 
 
 def parse_days(text: str, ref: date | None = None) -> int:
@@ -290,7 +238,7 @@ def parse_request(query: str, ref: date | None = None) -> TripRequest:
         if len(owners) == 1 and owners[0] in all_supported_cities():
             city, assumed = owners[0], False
 
-    today = ref or date.today()
+    today = ref or shanghai_today()
     start, hint = parse_start_date(text, today)
     return TripRequest(
         city=city,
@@ -683,10 +631,17 @@ def _area_note(request: TripRequest, candidates: dict[str, Any]) -> str | None:
     )
 
 
-async def generate(query: str, today: date | None = None) -> dict[str, Any]:
+async def generate(
+    query: str, today: date | None = None, target_date: str | None = None
+) -> dict[str, Any]:
     """完整排程链路：解析 → 天气 → 候选 → LLM → 审计。"""
-    ref = today or date.today()
+    ref = today or shanghai_today()
+    if not target_date:
+        resolve_date(query, ref)  # Do not turn an invalid explicit date into today.
     request = parse_request(query, ref)
+    if target_date:
+        request.start_date = iso_date(target_date)
+        request.date_hint = target_date
     # 用户写了「国庆」「周末」就按那个日期排，没写才从今天起算。
     # 这里原先直接写 date.today()，于是"国庆去广州"排出来的还是今明两天。
     start = date.fromisoformat(request.start_date) if request.start_date else ref
@@ -702,6 +657,9 @@ async def generate(query: str, today: date | None = None) -> dict[str, Any]:
         system=PLAN_SYSTEM_PROMPT,
     )
 
+    if [day.date for day in plan.plan] != dates or plan.days != request.days:
+        raise DateResolutionError("生成的行程日期或天数与请求不一致，请重试。")
+
     # 审计兜底：模型可能没听「雨天不排户外」，这里逐条改掉
     plan, adjustments = audit_plan(plan, weather_by_date, candidates["indoor"])
 
@@ -709,6 +667,9 @@ async def generate(query: str, today: date | None = None) -> dict[str, Any]:
     attach_coordinates(plan, candidates.get("coords", {}))
 
     return {
+        "date_context": date_metadata(
+            start.isoformat(), start.isoformat() if start.isoformat() in weather_by_date else None
+        ),
         "request": request.model_dump(),
         "dates": dates,
         "weather": weather_by_date,
@@ -749,7 +710,8 @@ def render_text(result: dict[str, Any]) -> str:
     """把结果渲染成对话里可读的文本（Agent 工具用）。"""
     plan = result.get("plan") or {}
     request = result.get("request") or {}
-    lines = [f"【{plan.get('city', request.get('city'))} {plan.get('days')} 天行程】"]
+    lines = [date_header(result["date_context"])] if result.get("date_context") else []
+    lines += [f"【{plan.get('city', request.get('city'))} {plan.get('days')} 天行程】"]
     if plan.get("summary"):
         lines.append(plan["summary"])
 
@@ -770,6 +732,9 @@ def render_text(result: dict[str, Any]) -> str:
             if entry.get("reason"):
                 lines.append(f"      {entry['reason']}")
 
+    if result.get("weather_hint"):
+        lines.append(result["weather_hint"])
+
     if result.get("adjustments"):
         lines.append("\n已按天气做的调整：")
         lines.extend(f"  - {item}" for item in result["adjustments"])
@@ -778,7 +743,7 @@ def render_text(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-async def run(query: str) -> str:
+async def run(query: str, target_date: str | None = None) -> str:
     """Agent 工具入口：排一份行程并返回可读文本。"""
-    result = await generate(query)
+    result = await generate(query, target_date=target_date)
     return render_text(result)
