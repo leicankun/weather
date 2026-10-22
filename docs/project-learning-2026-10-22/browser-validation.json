@@ -1,0 +1,135 @@
+{
+  "checkedAt": "2026-10-22T04:34:13.233Z",
+  "url": "http://127.0.0.1:8420/",
+  "diagrams": [
+    {
+      "anchor": "arch-overview",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "arch-request-lifecycle",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "arch-dependencies",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "arch-storage",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-auth-dependency",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-auth-frontend-token",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-weather-background",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-agent-background",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-agent-stream",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-agent-loop",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-multiagent-background",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-multiagent-parallel",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-multiagent-approval-proposal",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-rag-background",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-rag-hybrid-retrieval",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-memory-context-window",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-fe-user-overview",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-fe-user-http",
+      "error": false,
+      "svgs": 1
+    },
+    {
+      "anchor": "practice-fe-user-home",
+      "error": false,
+      "svgs": 1
+    }
+  ],
+  "searchAndInterview": {
+    "anchor": "practice-interview-questions",
+    "answerExpanded": "true",
+    "questions": 7
+  },
+  "theme": {
+    "dark": true
+  },
+  "paging": {
+    "anchor": "practice-interview-pitch",
+    "info": "109 / 109",
+    "nextDisabled": true
+  },
+  "progress": {
+    "anchor": "practice-interview-pitch",
+    "dark": true
+  },
+  "code": {
+    "anchor": "practice-agent-loop",
+    "diagramErrors": 0,
+    "expanded": "true",
+    "visibleCode": 1
+  },
+  "back": {
+    "anchor": "practice-interview-pitch"
+  },
+  "forward": {
+    "anchor": "practice-agent-loop"
+  },
+  "mobile": {
+    "documentOverflow": false,
+    "mainOverflow": false,
+    "viewportWidth": 409
+  }
+}

@@ -281,3 +281,11 @@ API 回归使用真实数据库和完整多智能体图，模型替身覆盖单�
 | 真实模型/API 验收 | 7 个场景通过，使用真实开发 PostgreSQL、智谱 Embedding、百炼重排和 DeepSeek；无模型回退，临时账号清理后数量为 0 |
 
 真实验收包含 3 个公共检索问题、私有订单检索、其他用户隔离、历史消息排除和 1 次原生 LangChain 资料问答；没有重新评估整套 single/multi Agent 工具决策或迁移前后检索质量。前端未改动，未重复前端检查。详细方法、边界和原始结果见 [LANGCHAIN_RAG_VALIDATION_2026-10-11.md](LANGCHAIN_RAG_VALIDATION_2026-10-11.md) 与 [JSON](LANGCHAIN_RAG_LIVE_2026-10-11.json)。
+
+## 2026-10-22：交互式项目学习文档
+
+新增独立的 [项目学习指南](project-learning-2026-10-22/README.md)：standard 深度覆盖全部十个模块，含架构、调用链、源码入口和面试准备。保留根目录已有学习文件及 agent.py、embedding_client.py 的既有本地修改；未修改业务源码或 .env。
+
+文档共 109 节、79 条调用链、373 个源码步骤，其中 371 个连续代码片段与当前源码范围匹配；106 个业务端点索引、19 张实际渲染验证的 Mermaid 图、7 道面试题。JSON Schema、引用文件与行号、关键要点、内联 JS 语法检查通过，并记录 118 个源码文件哈希。实际页面搜索、代码/答案展开、分页、主题、阅读恢复和浏览器历史导航通过。
+
+根目录 check:js、用户端 lint、18 项前端单测和两端 build 通过；Chrome 下 11 项 mock API E2E 通过，保留构建大产物提示。本次未运行后端测试、真实数据库或付费模型/API 验收，不能据此推导全栈联调通过。详见 [本次验证记录](project-learning-2026-10-22/VALIDATION.md)、[源码检查结果](project-learning-2026-10-22/source-validation.json) 和 [页面交互结果](project-learning-2026-10-22/browser-validation.json)。
