@@ -228,19 +228,20 @@ body::after {
    ============================================================ */
 .sidebar {
   width: 270px; min-width: 270px;
-  height: calc(100vh - 58px); overflow-y: auto;
+  height: calc(100vh - 58px); overflow-y: auto; overflow-x: hidden;
+  overscroll-behavior-y: contain;
   padding: 36px 16px 48px 26px;
   border-right: 1px solid rgba(80,50,30,0.07);
   background: rgba(250,247,242,0.5);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  scrollbar-width: thin; scrollbar-color: #d4c8b8 transparent;
+  scrollbar-width: auto; scrollbar-color: #d4c8b8 transparent;
   transition: all 0.5s var(--ease-out);
 }
 [data-theme="dark"] .sidebar {
   background: rgba(26,21,18,0.55); border-right-color: rgba(232,224,213,0.06);
   scrollbar-color: #4a3e32 transparent;
 }
-.sidebar::-webkit-scrollbar { width: 3px; }
+.sidebar::-webkit-scrollbar { width: 8px; }
 .sidebar::-webkit-scrollbar-track { background: transparent; }
 .sidebar::-webkit-scrollbar-thumb { background: #d4c8b8; border-radius: 10px; }
 [data-theme="dark"] .sidebar::-webkit-scrollbar-thumb { background: #4a3e32; }
@@ -286,10 +287,10 @@ body::after {
 [data-theme="dark"] .toc-optional-tag { background: #3a2a10; color: #e0c060; }
 
 .toc-sections {
-  overflow: hidden; transition: max-height 0.45s var(--ease-out), opacity 0.3s;
-  max-height: 600px; opacity: 1;
+  /* The sidebar owns scrolling; long chapters must keep their natural height. */
+  opacity: 1;
 }
-.toc-chapter.collapsed .toc-sections { max-height: 0; opacity: 0; }
+.toc-chapter.collapsed > .toc-sections { display: none; }
 
 .toc-module-header {
   display: flex; align-items: center; padding: 8px 14px; margin: 6px 0 2px;
@@ -314,10 +315,9 @@ body::after {
 }
 .toc-module-group.collapsed .toc-module-chevron { transform: rotate(-90deg); }
 .toc-module-sections {
-  overflow: hidden; transition: max-height 0.4s var(--ease-out), opacity 0.25s;
-  max-height: 500px; opacity: 1;
+  opacity: 1;
 }
-.toc-module-group.collapsed .toc-module-sections { max-height: 0; opacity: 0; }
+.toc-module-group.collapsed > .toc-module-sections { display: none; }
 
 .toc-section-link {
   display: flex; align-items: center; padding: 8px 14px; margin: 2px 0;
@@ -943,7 +943,6 @@ body::after {
 
 .main-content { min-width: 0; }
 .text-content { overflow-wrap: anywhere; }
-.toc-module-sections { max-height: none; }
 @media (max-width: 480px) {
   .section-nav { padding: 0 8px; gap: 6px; }
   .section-nav-btn { padding: 8px 10px; font-size: .72rem; }

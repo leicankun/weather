@@ -33,6 +33,7 @@ python -m http.server 8420 --bind 127.0.0.1 --directory docs/project-learning-20
 | browser-validation.json | 本地页面实际交互与 19 张图的验证结果 |
 | VALIDATION.md | 本次检查范围、结果和限制 |
 | preview.png | 真实浏览器预览截图 |
+| sidebar-validation.json / sidebar-fixed.png | 长目录滚动、折叠与末节跳转的修复验证 |
 | learning-assets/ | 原有本地 highlight.js、marked、Mermaid 和代码主题资源 |
 
 ## 依据与边界

@@ -1,0 +1,51 @@
+{
+  "checkedAt": "2026-10-22T09:30:09.622Z",
+  "before": {
+    "chapterContentHeight": 4671,
+    "chapterHeight": 600,
+    "chapterOverflow": "hidden",
+    "maxHeight": "600px",
+    "moduleCount": 10,
+    "sidebarContentHeight": 1861,
+    "sidebarHeight": 540
+  },
+  "after": {
+    "chapterContentHeight": 5178,
+    "chapterHeight": 5178,
+    "chapterOverflow": "visible",
+    "maxHeight": "none",
+    "moduleCount": 10,
+    "sidebarContentHeight": 6430,
+    "sidebarHeight": 540
+  },
+  "actualWheelScroll": {
+    "reachedBottom": true,
+    "scrollTop": 5890,
+    "maxScroll": 5890
+  },
+  "moduleCollapsedCheck": {
+    "display": "none",
+    "expanded": "false"
+  },
+  "moduleExpandedCheck": {
+    "display": "block",
+    "expanded": "true",
+    "links": 9
+  },
+  "chapterCollapsedCheck": {
+    "display": "none",
+    "expanded": "false"
+  },
+  "chapterExpandedCheck": {
+    "contentHeight": 5178,
+    "display": "block",
+    "expanded": "true",
+    "height": 5178
+  },
+  "lastSectionCheck": {
+    "drawerClosed": true,
+    "heading": "清洗任务：上传、轮询与下载🔗",
+    "position": "107 / 109",
+    "sidebarScrollTop": 5890
+  }
+}
