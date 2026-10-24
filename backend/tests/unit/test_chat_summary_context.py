@@ -34,18 +34,10 @@ def test_单多智能体接收摘要为背景且不更改原始角色():
     assert history[0]["role"] == "summary"
 
 
-async def test_多智能体LLM路由收到会话摘要(monkeypatch):
-    calls = []
-
-    async def route(prompt, schema, **kwargs):
-        calls.append(prompt)
-        return multi_agent.DomainChoice(domains=["weather"])
-
-    monkeypatch.setattr(multi_agent, "ainvoke_json", route)
+async def test_多智能体向量路由继承会话摘要():
     assert await multi_agent.plan_domains(
         "那明天呢", history=[{"role": "summary", "content": "用户在查广州天气"}]
     ) == ["weather"]
-    assert "用户在查广州天气" in calls[0]
 
 
 def test_核验保留摘要及过渡消息并标记截断():

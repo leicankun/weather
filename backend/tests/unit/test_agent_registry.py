@@ -10,15 +10,15 @@ import pathlib
 
 import pytest
 
-from app.services import local_tools
+from app.services import local_tools, multi_agent
 from app.services.agent_registry import (
     DOMAIN_DEPENDS,
     DOMAIN_ORDER,
     DOMAINS,
     group_tools,
-    route_domains,
     tools_for_domain,
 )
+from app.services.intent_examples import INTENT_EXAMPLES
 from mcp_server import tools as mcp_business
 
 
@@ -79,7 +79,7 @@ class TestRegistryConsistency:
         for key, domain in DOMAINS.items():
             assert domain.tools, f"{key} 没有工具"
             assert domain.prompt, f"{key} 没有提示词"
-            assert domain.keywords or domain.patterns, f"{key} 没有任何路由依据"
+            assert len(INTENT_EXAMPLES[key]) >= 2, f"{key} 缺少语义示例"
 
     def test_分组函数把工具放进对应领域(self):
         class FakeTool:
@@ -124,25 +124,25 @@ class TestRouteDomains:
             ("有什么新公告吗", ["knowledge"]),
         ],
     )
-    def test_单领域路由(self, question, expected):
-        assert route_domains(question) == expected
+    async def test_单领域路由(self, question, expected):
+        assert await multi_agent.plan_domains(question) == expected
 
-    def test_复合问题路由到多个领域(self):
-        domains = route_domains("明天去广州塔穿什么、怎么走")
+    async def test_复合问题路由到多个领域(self):
+        domains = await multi_agent.plan_domains("明天去广州塔穿什么、怎么走")
         assert domains == ["weather", "outfit", "route"]
 
     @pytest.mark.parametrize("question", ["你好呀", "你是谁", "谢谢"])
-    def test_闲聊不路由到任何领域(self, question):
+    async def test_闲聊不路由到任何领域(self, question):
         # 返回空 → 走通用回答，不绑定任何工具（省 token 也省延迟）
-        assert route_domains(question) == []
+        assert await multi_agent.plan_domains(question) == []
 
-    def test_路由顺序稳定(self):
+    async def test_路由顺序稳定(self):
         """同一问题多次路由结果必须一致，否则并行分支顺序会飘。"""
         question = "明天去广州塔穿什么、怎么走"
-        assert route_domains(question) == route_domains(question)
+        assert await multi_agent.plan_domains(question) == await multi_agent.plan_domains(question)
 
-    def test_结果按注册顺序排列(self):
-        domains = route_domains("去广州塔怎么走、穿什么、天气如何")
+    async def test_结果按注册顺序排列(self):
+        domains = await multi_agent.plan_domains("去广州塔怎么走、穿什么、天气如何")
         assert domains == [key for key in DOMAIN_ORDER if key in domains]
 
     def test_未知领域工具查询返回空(self):

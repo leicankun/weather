@@ -261,12 +261,8 @@ def context_model(monkeypatch):
     async def domains():
         return {}
 
-    async def route(*args, **kwargs):
-        return multi_agent.DomainChoice(domains=[])
-
     monkeypatch.setattr(agent, "_get_all_tools", tools)
     monkeypatch.setattr(multi_agent, "load_domain_tools", domains)
-    monkeypatch.setattr(multi_agent, "ainvoke_json", route)
     yield model
     agent._agent_instance = None
     multi_agent.reset_cache()

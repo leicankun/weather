@@ -82,12 +82,8 @@ def memory_model(monkeypatch, memory_enabled):
     async def domain_tools():
         return {}
 
-    async def route(*args, **kwargs):
-        return multi_agent.DomainChoice(domains=[])
-
     monkeypatch.setattr(agent, "_get_all_tools", tools)
     monkeypatch.setattr(multi_agent, "load_domain_tools", domain_tools)
-    monkeypatch.setattr(multi_agent, "ainvoke_json", route)
     yield model
     multi_agent.reset_cache()
     agent._agent_instance = None

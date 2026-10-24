@@ -20,7 +20,7 @@
    新架构上线的第一步是"能一键回退"。
 
 与 Day 40 同样的原则：**能纯函数化的都抽出来**。
-路由（`route_domains`）与汇总决策（`should_synthesize`）都能脱离 LLM 单测，
+向量打分与汇总决策（`should_synthesize`）都能脱离对话 LLM 单测，
 LLM 只负责它真正擅长的部分（理解与表达）。
 """
 
@@ -40,15 +40,14 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel, Field
 
-from app.services import approval_service, checkpoint_service
+from app.services import approval_service, checkpoint_service, intent_router
 from app.services.agent_metrics import agent_metrics
-from app.services.agent_registry import DOMAINS, route_domains
+from app.services.agent_registry import DOMAINS
 from app.services.answer_verification import (
     evidence_record,
 )
-from app.services.llm_client import ainvoke_json, get_llm
+from app.services.llm_client import get_llm
 from app.services.local_tools import get_local_tools
 from app.services.mcp_client import get_mcp_tools
 from app.services.temporal_context import (
@@ -77,17 +76,6 @@ SHARED_RULES = (
     "也不能猜测上传失败或未索引。"
 )
 
-ROUTE_SYSTEM_PROMPT = (
-    "你是出行助手的调度模块。请判断用户的问题需要哪些领域助手参与，可多选。"
-    "领域只有这些：weather（天气）、outfit（穿搭）、route（出行路线）、"
-    "itinerary（用户的行程安排 / 新排行程 / 上传的攻略）、"
-    "knowledge（景点美食攻略与资讯）。"
-    '只输出 JSON，形如 {"domains": ["weather", "outfit"]}；'
-    "如果问题与出行完全无关（闲聊、自我介绍等），返回空数组。"
-    "若提供历史对话，请用它理解本次问题中的省略和指代；只路由本次问题，"
-    "不要把历史中已经回答过的其他问题也分派出去。"
-)
-
 SYNTHESIZE_SYSTEM_PROMPT = (
     "你是出行助手的主笔，负责把几位领域助手的答复整合成**一份**连贯的回答。\n"
     "要求：\n"
@@ -103,12 +91,6 @@ GENERAL_SYSTEM_PROMPT = (
     "你是「广州天气旅行助手」，一个友好的本地出行服务 AI。"
     "用中文简洁友好地回答用户问题，控制在 100 字以内。"
 )
-
-
-class DomainChoice(BaseModel):
-    """LLM 路由的输出结构。"""
-
-    domains: list[str] = Field(default_factory=list, description="命中的领域 key，可为空数组")
 
 
 @dataclass
@@ -150,6 +132,8 @@ class MultiAgentState(TypedDict):
     question: str
     memory_context: str
     history: list[dict[str, str]]
+    routing: dict
+    routing_stop: str
     domains: list[str] | None  # None 表示未路由；空列表表示已决定走通用回答
     # 各领域 Agent 的回答（并行写入 → 需要 reducer 合并）
     domain_answers: Annotated[dict[str, str], _merge_answers]
@@ -302,64 +286,45 @@ async def run_domain_agent(
     return run
 
 
-async def _llm_route(question: str, history: list[dict[str, str]] | None = None) -> list[str]:
-    """关键词没命中时，交给 LLM 判断需要哪些领域（失败返回空）。
-
-    返回值**必须过滤**：模型可能编出不存在的领域名，
-    直接拿去查 DOMAINS 会 KeyError。
-    """
-    prompt = question
-    if history:
-        messages = _messages_with_history("", question, history)[1:-1]
-        lines = [
-            f"{'用户' if isinstance(message, HumanMessage) else '助手'}：{message.content}"
-            for message in messages
-        ]
-        body = "\n".join(lines)
-        prompt = f"历史对话（仅供理解本次问题）：\n{body}\n\n本次问题：{question}"
-    try:
-        choice = await ainvoke_json(prompt, DomainChoice, system=ROUTE_SYSTEM_PROMPT)
-        picked = [key for key in choice.domains if key in DOMAINS]
-    except Exception as exc:  # noqa: BLE001 路由失败退化为通用回答，不影响可用性
-        logger.warning("LLM 领域路由失败，退化为通用回答: %s", exc)
-        return []
-    if picked:
-        logger.info("LLM 路由命中领域: %s（用户：%s）", picked, question)
-    return picked
+async def plan_routing(question: str, history: list[dict] | None = None) -> dict:
+    """共用示例向量路由，保留多领域和低分/故障状态供普通与 SSE 图复用。"""
+    context = checkpoint_service.current()
+    if context and context.resume:
+        saved = await context.saver.aget_tuple(context.config)
+        values = saved.checkpoint["channel_values"] if saved else {}
+        if values.get("domains") is not None:
+            return {
+                "domains": values["domains"],
+                "routing": values.get("routing", {}),
+                "routing_stop": values.get("routing_stop", ""),
+            }
+    decision = await intent_router.identify_intent(question, history)
+    return {
+        "domains": decision.domains,
+        "routing": decision.state(),
+        "routing_stop": decision.stop_answer,
+    }
 
 
-# ---------------------------------------------------------------------------
-# 图节点
-# ---------------------------------------------------------------------------
-
-
-async def plan_domains(question: str, history: list[dict[str, str]] | None = None) -> list[str]:
-    """决定这次问题要跑哪些领域（关键词优先，没命中再问 LLM）。
-
-    流式入口提前确定领域与意图；有领域时必须等核验完成，
-    无领域的通用回答仍可转发模型 token。
-    """
-    if approval_service.is_management_request(question):
-        return ["management"]
-    domains = route_domains(question)
-    if not domains:
-        domains = await _llm_route(question, history)
-    return domains
+async def plan_domains(question: str, history: list[dict] | None = None) -> list[str]:
+    """兼容比较脚本的领域列表接口；正式图使用 plan_routing 保留停止状态。"""
+    return (await plan_routing(question, history))["domains"]
 
 
 async def _supervisor_node(state: MultiAgentState) -> dict:
-    """调度节点：关键词优先（免费且确定），没命中再问一次 LLM。
-
-    若调用方已算好领域（流式路径为了决定转发哪个节点会先算一次），
-    直接用现成结果，避免重复一次 LLM 路由调用。
-    """
+    """调度节点：共享语义路由，流式入口已有结果时不重复计算。"""
     context = state.get("temporal_context") or build_temporal_context(
         state["question"], state.get("history")
     )
-    domains = state.get("domains")
-    if domains is None:
-        domains = await plan_domains(state["question"], state.get("history"))
-    return {"domains": domains, "temporal_context": context}
+    route = (
+        await plan_routing(state["question"], state.get("history"))
+        if state.get("domains") is None
+        else {
+            key: state.get(key, {} if key == "routing" else "")
+            for key in ("domains", "routing", "routing_stop")
+        }
+    )
+    return {**route, "temporal_context": context}
 
 
 # 领域 → 旧意图标签（前端按旧词表展示 intent，映射回去以免破坏兼容）
@@ -392,6 +357,8 @@ def _route_from_supervisor(state: MultiAgentState) -> list[str]:
 
     没有命中领域时走 general（闲聊 / 无需工具的问题）。
     """
+    if state.get("routing_stop"):
+        return ["routing_result"]
     domains = state.get("domains") or []
     if domains == ["management"]:
         return ["prepare_action"]
@@ -539,6 +506,7 @@ async def chat_multi_stream(
     *,
     history: list[dict[str, str]] | None = None,
     memory_context: str = "",
+    routing: dict | None = None,
 ):
     """多智能体流式入口（SSE）。
 
@@ -548,17 +516,22 @@ async def chat_multi_stream(
 
     token 用量按全部节点的 chunk 累加，统计到的仍是这次请求的真实成本。
     domains 可由调用方预先算好传入（上层已算过就别再算一遍——
-    LLM 兜底路由那一次是有成本的）。
+    向量路由需要一次查询 Embedding，首次还需生成示例向量）。
     """
-    domains = domains if domains is not None else await plan_domains(question, history)
-    source = stream_source_node(domains)
+    routing = routing or (
+        await plan_routing(question, history)
+        if domains is None
+        else {"domains": domains, "routing": {}, "routing_stop": ""}
+    )
+    domains = routing["domains"]
+    source = "routing_result" if routing.get("routing_stop") else stream_source_node(domains)
 
     initial: MultiAgentState = {
         "question": question,
         "temporal_context": build_temporal_context(question, history),
         "history": history or [],
         "memory_context": memory_context,
-        "domains": domains,
+        **routing,
         "domain_answers": {},
         "domain_evidence": {},
         "verification": {},
@@ -633,6 +606,8 @@ async def _build_graph(checkpointer=None):
     graph = StateGraph(MultiAgentState)
 
     graph.add_node("supervisor", _supervisor_node)
+    graph.add_node("routing_result", intent_router.routing_result_node)
+    graph.add_edge("routing_result", END)
     graph.add_node("general", _general_node)
     graph.add_node("synthesize", _synthesize_node)
     graph.add_node("verify", _verify_node)
@@ -643,7 +618,9 @@ async def _build_graph(checkpointer=None):
 
     graph.add_edge(START, "supervisor")
     graph.add_conditional_edges(
-        "supervisor", _route_from_supervisor, [*domain_nodes, "general", "prepare_action"]
+        "supervisor",
+        _route_from_supervisor,
+        [*domain_nodes, "general", "prepare_action", "routing_result"],
     )
     for name in domain_nodes:
         # 每个领域节点都连到 synthesize：多域时它们全部结束后才执行汇总
@@ -704,6 +681,8 @@ async def chat_multi(
         "history": history or [],
         "memory_context": memory_context,
         "domains": None,
+        "routing": {},
+        "routing_stop": "",
         "domain_answers": {},
         "domain_evidence": {},
         "verification": {},

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 from typing import Any
 
 import httpx
@@ -68,11 +69,15 @@ class EmbeddingClient:
         """是否配置了真实 API Key（决定走真实接口还是本地兜底）。"""
         return bool(self.api_key) and not self.api_key.startswith("sk-xxxxxxxx")
 
-    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        """批量生成向量。优先真实 API，失败/无 Key 时退化为本地伪向量。"""
+    async def embed_texts(
+        self, texts: list[str], *, allow_fallback: bool = True
+    ) -> list[list[float]]:
+        """批量生成向量；语义路由传 allow_fallback=False，禁止混入伪向量。"""
         if not texts:
             return []
         if not self.available:
+            if not allow_fallback:
+                raise ValueError("Semantic embeddings require a configured API key")
             logger.warning(
                 "ZHIPU_API_KEY 未配置或为占位符，使用本地伪向量兜底（维度 %s）", self.dim
             )
@@ -93,13 +98,25 @@ class EmbeddingClient:
                 resp = await client.post(url, json=payload, headers=headers)
                 resp.raise_for_status()
                 data = resp.json()
-            vectors = [item["embedding"] for item in data.get("data", [])]
+            items = data.get("data", [])
+            if len(items) != len(texts):
+                raise ValueError("Embedding response count does not match input")
+            indices = [item.get("index", index) for index, item in enumerate(items)]
+            if sorted(indices) != list(range(len(texts))):
+                raise ValueError("Invalid embedding response indices")
+            vectors = [item["embedding"] for _, item in sorted(zip(indices, items, strict=True))]
             # 校验维度，防止与 Vector(1024) 不匹配报错
             for v in vectors:
                 if len(v) != self.dim:
                     raise ValueError(f"向量维度 {len(v)} 与预期 {self.dim} 不一致")
+                if not all(isinstance(x, (int, float)) and math.isfinite(x) for x in v):
+                    raise ValueError("Invalid embedding values")
+                if not any(v):
+                    raise ValueError("Zero embedding is not a semantic vector")
             return vectors
-        except Exception as exc:  # noqa: BLE001 网络/鉴权/维度异常统一降级
+        except Exception as exc:
+            if not allow_fallback:
+                raise
             logger.warning("智谱 Embedding 调用失败（%s），使用本地伪向量兜底", exc)
             return [_local_pseudo_vector(t, self.dim) for t in texts]
 

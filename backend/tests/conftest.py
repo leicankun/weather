@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import os
+from typing import ClassVar
 
 # ⚠️ 必须在导入 app 之前设置：settings 在导入时就读取环境变量
 TEST_DB_NAME = "weather_db_test"
@@ -145,6 +146,77 @@ def pytest_sessionstart(session) -> None:
 
 
 # ===== fixture =====
+
+
+@pytest.fixture(autouse=True)
+def semantic_embeddings(monkeypatch):
+    """Graph/API tests use labelled, orthogonal vectors, never live embedding calls.
+
+    These fixtures verify orchestration, not linguistic accuracy. A separate live
+    evaluation uses held-out utterances against the configured semantic model.
+    """
+    import re
+
+    from app.services import intent_router
+    from app.services.intent_examples import INTENT_EXAMPLES
+
+    labels = tuple(INTENT_EXAMPLES)
+
+    def clean(text):
+        return re.sub(r"[，,。；;！？!?、\s]+", "", text)
+
+    meanings = {clean(text): (label,) for label, texts in INTENT_EXAMPLES.items() for text in texts}
+    extras = {
+        "weather": [
+            "广州天气",
+            "广州天气怎么样",
+            "今天天气",
+            "天气",
+            "明天天气",
+            "明天天气怎么样",
+            "广州明天天气",
+            "广州明天天气怎么样",
+            "用户在查广州天气",
+            "明天广州天气",
+            "再查广州天气",
+        ],
+        "outfit": ["明天去广州塔穿什么", "那穿什么", "怎么穿", "穿什么"],
+        "knowledge": ["本地攻略里的云舟集合时间"],
+        "route": ["怎么走", "只告诉我怎么去"],
+        "itinerary": ["我上传的云舟资料里", "行程集合时间", "我周末去广州塔"],
+        "followup": ["继续"],
+    }
+    for label, texts in extras.items():
+        meanings.update((clean(text), (label,)) for text in texts)
+    meanings[clean("今天天气和穿什么")] = ("weather", "outfit")
+    meanings[clean("广州明天天气怎么穿")] = ("weather", "outfit")
+
+    class FixtureEmbedding:
+        base_url = "fixture://semantic"
+        model = "labelled-vectors"
+        dim = len(labels) + 1
+        api_key = "fixture"
+        available = True
+        calls: ClassVar[list] = []
+
+        def __init__(self, **kwargs):
+            pass
+
+        async def embed_texts(self, texts, *, allow_fallback=True):
+            assert allow_fallback is False
+            self.calls.append(list(texts))
+            result = []
+            for utterance in texts:
+                vector = [0.0] * self.dim
+                for label in meanings.get(clean(utterance), ("general",)):
+                    vector[labels.index(label)] = 1.0
+                result.append(vector)
+            return result
+
+    intent_router.intent_router.reset()
+    monkeypatch.setattr(intent_router, "EmbeddingClient", FixtureEmbedding)
+    yield FixtureEmbedding, meanings
+    intent_router.intent_router.reset()
 
 
 @pytest.fixture(autouse=True)

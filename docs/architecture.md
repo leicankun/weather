@@ -8,6 +8,8 @@ Vue 页面 → api/*.js → FastAPI routers → services / skills → PostgreSQL
 
 AI 对话 → agent.py（single）或 multi_agent.py（multi）→ LangChain 模型工具调用 → MCP 公共工具 / 本地用户工具 → SSE 返回前端。默认 single，AGENT_MODE=multi 启用领域编排。
 
+单/多模式的入口业务意图统一使用示例问句向量匹配，支持多领域选择和省略式追问继承上下文。移除原业务关键词/正则与对话模型分类兜底；低分追问、服务故障明确提示，审批仍走独占分支。普通/SSE 复用决策，检查点保存并恢复路由状态。算法、配置和真实验收见 [INTENT_ROUTING.md](INTENT_ROUTING.md)。
+
 单模式每轮工具调用默认最多 8 项（`AGENT_MAX_TOOL_CALLS`），在业务 IO 前按整批预留，错误调用也计数，超限返回停止提示。计数及本轮上限随检查点保存，新一轮重置；配置与恢复边界见 [AGENT_TOOL_BUDGET.md](AGENT_TOOL_BUDGET.md)。
 
 单/多模式共用上海时区日期上下文，按任务传递明确日期，并在工具执行前校验 `target_date`。穿搭、路线、天气和行程按目标日处理，缺失预报明确说明；单模式的日期工具回答也经过证据核验，涉及日期的 SSE 等图完成后发送最终答案。历史相对日期按原消息发送日解析，检查点恢复保留本轮锚点。契约、支持范围与限制见 [AGENT_DATES.md](AGENT_DATES.md)。
@@ -29,7 +31,7 @@ AI 对话 → agent.py（single）或 multi_agent.py（multi）→ LangChain 模
 - utils/sse.js：支持 UTF-8 跨块、CRLF 和流尾事件的读取器。
 - PWA 只缓存静态应用外壳，用户 API 不进入 Service Worker 缓存。
 
-单智能体和多智能体文本对话均复用 PostgreSQL 的 `chat_messages`：登录用户每轮保存提问与最终回答。短期上下文默认读取本会话滚动摘要和全部尚未摘要的原始消息；每五轮检查一次，短期历史超过 6000 字符才调用默认模型压缩旧消息，最近 10 条（通常约 5 轮）保留原文。`chat_summaries` 按 `user_id + conversation_id` 保存摘要、覆盖水位和检查进度，两次更新之间的过渡消息不会被截掉。多智能体把同一份背景传给 LLM 路由、领域、通用、汇总和核验节点；关键词路由仍只匹配本次问题。普通接口和 SSE 接口行为一致，匿名用户不保存或读取历史。配置和故障边界见 [CHAT_SUMMARY.md](CHAT_SUMMARY.md)。
+单智能体和多智能体文本对话均复用 PostgreSQL 的 `chat_messages`：登录用户每轮保存提问与最终回答。短期上下文默认读取本会话滚动摘要和全部尚未摘要的原始消息；每五轮检查一次，短期历史超过 6000 字符才调用默认模型压缩旧消息，最近 10 条（通常约 5 轮）保留原文。`chat_summaries` 按 `user_id + conversation_id` 保存摘要、覆盖水位和检查进度，两次更新之间的过渡消息不会被截掉。多智能体把同一份背景传给领域、通用、汇总和核验节点；向量路由优先识别本次问题，仅对省略式追问继承最近用户问题的领域。普通接口和 SSE 接口行为一致，匿名用户不保存或读取历史。配置和故障边界见 [CHAT_SUMMARY.md](CHAT_SUMMARY.md)。
 
 登录用户新增两层长期记忆：JSONB 偏好/事实卡片每轮有限注入；需要回忆时，从独立历史库以 BM25 + 向量 + RRF + reranker 检索。单/多智能体在入口共用读取与写入，SSE done 在写入完成或超时降级后发出；原始一轮消息在同一事务保存。按用户隔离、来源外键级联删除与清空水位避免旧记忆复活，详见 [MEMORY.md](MEMORY.md)。
 

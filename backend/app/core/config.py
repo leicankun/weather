@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     AGENT_MODE: str = "single"
     # 单模式每轮逻辑工具调用项预算（一个批次含多个工具时逐项计数）。
     AGENT_MAX_TOOL_CALLS: int = Field(default=8, ge=1, le=100)
+    # 示例问句语义路由：余弦相似度不是概率，阈值需随模型/示例集评估。
+    INTENT_SIMILARITY_THRESHOLD: float = Field(default=0.60, ge=0, le=1, allow_inf_nan=False)
+    INTENT_MULTI_MARGIN: float = Field(default=0.015, ge=0, le=1, allow_inf_nan=False)
+    INTENT_CONTEXT_TURNS: int = Field(default=3, ge=1, le=10)
+    INTENT_ROUTING_TIMEOUT: float = Field(default=30, gt=0, le=120, allow_inf_nan=False)
 
     # 登录文本会话的图状态与人工审批；必须先运行 Alembic upgrade head。
     CHECKPOINT_ENABLED: bool = True

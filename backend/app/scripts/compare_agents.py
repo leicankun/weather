@@ -25,7 +25,6 @@ from langchain_core.callbacks.usage import UsageMetadataCallbackHandler
 
 from app.core.config import settings
 from app.services import agent, multi_agent
-from app.services.agent_registry import route_domains
 from app.services.user_context import reset_current_user_id, set_current_user_id
 
 # 覆盖各类路由情形的代表性问题
@@ -171,7 +170,7 @@ async def main() -> int:
 
     single_total = multi_total = 0
     for question, kind in QUESTIONS:
-        domains = route_domains(question)
+        domains = await multi_agent.plan_domains(question)
         one = await _run_single(question)
         many = await _run_multi(question)
         single_total += one["ms"]

@@ -57,6 +57,10 @@ setup 会创建 backend/.venv、安装依赖，首次生成 backend/.env 和随�
 
 知识库与历史 RAG 默认使用 LangChain 编排的 BM25 + 向量混合检索、RRF 融合及 `gte-rerank-v2` 重排序。更新后执行 `backend/.venv/Scripts/python.exe -m pip install -r backend/requirements.txt` 安装新增的 `langchain-classic`、`langchain-community` 和 `rank-bm25`，然后重启后端、运行中的 worker 和独立 MCP 服务。保留 `jieba` 中文分词和已有百炼 Key，不需要安装 DashScope SDK 或新增迁移。缺少百炼 Key 或排序失败时返回 RRF 结果。仅为切换检索编排无需重新生成向量；从本地兜底向量切换至智谱真实 Embedding 时，仍需重建已有资料向量。组件见 [LANGCHAIN_RAG.md](LANGCHAIN_RAG.md)，参数、配置示例和返回分数含义见 [RAG_RETRIEVAL.md](RAG_RETRIEVAL.md)。
 
+## 向量意图识别
+
+文字对话的单/多 Agent 入口现在共用示例向量分类，需要真实 `ZHIPU_API_KEY`。复用现有 Embedding 配置，无新增依赖、迁移或必填 Key；未配置或服务故障会明确提示意图识别不可用，低分会追问。默认阈值和可选覆盖项见 [INTENT_ROUTING.md](INTENT_ROUTING.md)。更新后重启后端，现有 `.env` 无需覆盖。首轮生成进程内示例向量缓存会增加延迟。
+
 ## 双层长期记忆
 
 双层长期记忆默认开启，复用已配置的对话模型、智谱 Embedding 和百炼重排序；无需新 Key。更新后执行 `./scripts/dev.ps1 migrate` 创建 `0016_chat_memory` 并重启后端。旧聊天可在 `/docs` 登录后调用 `POST /api/v1/memory/backfill` 分批补索引，直到 `has_more=false`。配置、卡片查看和清空方式见 [MEMORY.md](MEMORY.md)。

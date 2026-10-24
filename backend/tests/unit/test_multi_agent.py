@@ -360,10 +360,6 @@ class TestMultiTurnHistory:
         _patch_llm(monkeypatch, [], capture=capture)
         _patch_tools(monkeypatch)
 
-        async def route(*args, **kwargs):
-            return multi_agent.DomainChoice(domains=[])
-
-        monkeypatch.setattr(multi_agent, "ainvoke_json", route)
         result = await multi_agent.chat_multi(question, history=history)
 
         assert result["answer"]
@@ -378,22 +374,12 @@ class TestMultiTurnHistory:
             assert review["history"] == history
             assert review["question"] == question
 
-    async def test_省略问题路由读取前文而不拼接关键词(self, monkeypatch):
+    async def test_省略问题继承最近用户领域(self):
         history = [
-            {"role": "user", "content": "广州塔的路线和明天天气"},
-            {"role": "assistant", "content": "已给出路线，明天晴"},
+            {"role": "user", "content": "广州明天天气"},
+            {"role": "assistant", "content": "明天晴，另外推荐几个景点"},
         ]
-        prompts = []
-
-        async def route(prompt, schema, **kwargs):
-            prompts.append(prompt)
-            return multi_agent.DomainChoice(domains=["weather"])
-
-        monkeypatch.setattr(multi_agent, "ainvoke_json", route)
         assert await multi_agent.plan_domains("那后天呢", history=history) == ["weather"]
-        assert len(prompts) == 1
-        assert "广州塔" in prompts[0] and "明天晴" in prompts[0]
-        assert prompts[0].endswith("本次问题：那后天呢")
 
     async def test_领域工具循环不会改写共享历史(self, monkeypatch):
         history = [{"role": "user", "content": "我要去广州塔"}]

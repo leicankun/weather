@@ -1,4 +1,4 @@
-"""LangGraph Agent：Day 8 意图识别 + Day 9 MCP 工具 + Day 10 RAG 与降级。
+"""LangGraph Agent：示例问句向量意图识别 + MCP 工具 + RAG。
 
 图结构（ReAct 式工具循环）：
     START -> classify_intent（意图识别）
@@ -19,7 +19,7 @@
 - classify_intent 判断意图，weather/travel/outfit/knowledge 类才绑定工具，
   other（闲聊）不绑定，节省 token 与延迟
 - 完善 ReAct 决策：信息不足时反问用户、有数据时直接回答、需查询时调用工具
-- 全链路降级：意图识别失败用关键词兜底，LLM 调用失败走 handle_error，
+- 全链路降级：意图低分时追问、Embedding 故障时明确提示，LLM 调用失败走 handle_error，
   工具失败由 handle_tool_errors 兜底，保证接口永不 500
 """
 
@@ -34,7 +34,13 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from app.core.config import settings
-from app.services import approval_service, checkpoint_service, llm_client, multi_agent
+from app.services import (
+    approval_service,
+    checkpoint_service,
+    intent_router,
+    llm_client,
+    multi_agent,
+)
 from app.services.llm_client import get_llm
 from app.services.local_tools import get_local_tools
 from app.services.mcp_client import get_mcp_tools
@@ -47,14 +53,6 @@ from app.services.temporal_context import (
 from app.services.user_context import reset_current_user_id, set_current_user_id
 
 logger = logging.getLogger(__name__)
-
-# 意图分类提示词
-INTENT_SYSTEM_PROMPT = (
-    "你是天气出行助手的意图识别模块。请判断用户输入属于哪一类，"
-    "只输出以下标签之一：weather（天气查询）、outfit（穿搭推荐）、"
-    "travel（出行/行程规划）、knowledge（知识问答，如景点/美食/交通攻略）、"
-    "other（其他/闲聊）。不要输出任何解释。"
-)
 
 # 生成回答提示词（含工具结果时使用）—— 含 ReAct 决策规则
 GENERATE_SYSTEM_PROMPT = (
@@ -98,69 +96,6 @@ CHAT_SYSTEM_PROMPT = (
 # 需要绑定工具的意图（这些意图下 LLM 可决定调用 MCP 工具）
 TOOL_INTENTS = {"weather", "travel", "outfit", "knowledge"}
 
-# 关键词兜底规则（意图识别 LLM 失败时使用）
-_INTENT_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "weather": ("天气", "气温", "温度", "下雨", "晴天", "台风", "降水", "湿度", "预报"),
-    "outfit": ("穿", "穿搭", "衣服", "着装", "打扮"),
-    "travel": ("去", "行程", "路线", "出行", "旅游", "交通", "地铁", "高铁", "航班", "怎么走"),
-    "knowledge": ("景点", "美食", "好吃", "好玩", "攻略", "推荐", "酒店", "住宿", "历史", "文化"),
-}
-
-# 强关键词预判表（命中即直接定意图，不再调用 LLM 分类）
-# 说明：仅收录「高置信、歧义小」的词，避免把闲聊误判为工具意图；
-#       弱词（如「去」「推荐」）仍只作为 LLM 分类失败时的兜底。
-_STRONG_INTENT_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "weather": (
-        "天气",
-        "气温",
-        "多少度",
-        "几度",
-        "下雨",
-        "降雨",
-        "晴天",
-        "阴天",
-        "台风",
-        "降水",
-        "湿度",
-        "预报",
-        "冷吗",
-        "热吗",
-    ),
-    "outfit": ("穿搭", "穿什么", "怎么穿", "该穿", "穿衣服", "着装", "穿多少", "穿鞋"),
-    "travel": (
-        "路线",
-        "怎么走",
-        "怎么去",
-        "出行",
-        "交通",
-        "地铁",
-        "公交",
-        "驾车",
-        "开车",
-        "打车",
-        "行程",
-        "日程",
-        "安排",
-        "多远",
-        "多久能到",
-        "怎么到达",
-    ),
-    "knowledge": (
-        "景点",
-        "美食",
-        "好吃",
-        "好玩",
-        "攻略",
-        "酒店",
-        "住宿",
-        "特产",
-        "历史",
-        "文化",
-        "哪里玩",
-        "哪里吃",
-    ),
-}
-
 
 class AgentState(TypedDict):
     """会话状态。messages 用 add_messages 做累加合并。"""
@@ -175,6 +110,9 @@ class AgentState(TypedDict):
     tool_limit_exceeded: bool
     messages: Annotated[list, add_messages]
     intent: str
+    domains: list[str]
+    routing: dict
+    routing_stop: str
     answer: str
     error: str
     memory_context: str
@@ -183,85 +121,20 @@ class AgentState(TypedDict):
     action_result: dict
 
 
-def _keyword_intent(text: str) -> str:
-    """关键词规则兜底（弱词）：LLM 意图识别失败时使用。"""
-    for label, keywords in _INTENT_KEYWORDS.items():
-        for kw in keywords:
-            if kw in text:
-                return label
-    return "other"
-
-
-# 资讯类关键词：需要优先于天气词判定
-# （如「台风资讯」应归为资讯检索，而不是被"台风"抢先判成 weather）
-_NEWS_KEYWORDS: tuple[str, ...] = ("资讯", "新闻", "公告", "报道", "通知", "动态")
-
-
-def _strong_keyword_intent(text: str) -> str | None:
-    """强关键词预判：命中即视为高置信意图，未命中返回 None。
-
-    背景：HTTP 层 /api/v1/chat 曾出现意图识别稳定返回 other 的问题
-    （直接调用 chat() 却正常），根因是 LLM 分类输出不稳定。
-    因此对高置信关键词直接定意图，不依赖 LLM 分类稳定性，
-    顺带省掉一次 LLM 调用（省 token、降延迟）。
-    """
-    if approval_service.is_management_request(text):
-        return "management"
-    # 资讯类优先判定：归入 knowledge（该意图下会绑定 search_news 工具）
-    if any(kw in text for kw in _NEWS_KEYWORDS):
-        return "knowledge"
-
-    for label, keywords in _STRONG_INTENT_KEYWORDS.items():
-        for kw in keywords:
-            if kw in text:
-                return label
-    return None
-
-
 async def _classify_intent(state: AgentState) -> dict:
-    """意图识别节点：强关键词预判 > LLM 分类 > 弱关键词兜底。"""
+    """单、多 Agent 共用向量意图路由；SSE 已算好的结果直接复用。"""
+    if state.get("routing"):
+        return {key: state[key] for key in ("intent", "domains", "routing", "routing_stop")}
     user_text = state["messages"][-1].content
-    context = state.get("temporal_context") or build_temporal_context(
-        user_text, state.get("history")
-    )
-
-    # 1) 强关键词预判：高置信命中直接定意图，跳过 LLM 分类
-    pre = _strong_keyword_intent(user_text)
-    if pre:
-        logger.info("强关键词预判命中: %s（用户：%s）", pre, user_text)
-        return {"intent": pre, "temporal_context": context}
-
-    # 2) 未命中强词：调用 LLM 分类，失败则弱关键词兜底
-    llm = get_llm()
-    try:
-        resp = await llm.ainvoke(
-            [
-                ("system", INTENT_SYSTEM_PROMPT),
-                ("human", user_text),
-            ]
-        )
-        raw = (resp.content if isinstance(resp.content, str) else str(resp.content)).strip()
-        intent = ""
-        for label in ("weather", "outfit", "travel", "knowledge", "other"):
-            if label in raw.lower():
-                intent = label
-                break
-        # 关键词规则作为兜底：当 LLM 未返回明确工具意图（含 other / 空 / 中文解释）时，
-        # 若用户输入明显指向某类意图（含"天气/穿/出行"等强词），则覆盖为对应意图，
-        # 避免明确的天气/穿搭/出行问题被误判为 other 而不绑定工具。
-        kw = _keyword_intent(user_text)
-        # 两层条件原本是嵌套的，合并后语义不变（内层条件提到外层做与运算）
-        llm_unclear = (
-            intent not in ("weather", "outfit", "travel", "knowledge") or intent == "other"
-        )
-        if llm_unclear and kw != "other":
-            intent = kw
-        logger.info("意图识别 raw=[%s] -> %s", raw[:60], intent)
-    except Exception as exc:  # noqa: BLE001 LLM 失败降级到关键词
-        logger.warning("意图识别 LLM 调用失败，降级到关键词规则: %s", exc)
-        intent = _keyword_intent(user_text)
-    logger.info("识别意图: %s（用户：%s）", intent, user_text)
-    return {"intent": intent, "temporal_context": context}
+    decision = await intent_router.identify_intent(user_text, state.get("history"))
+    return {
+        "intent": multi_agent.to_legacy_intent(decision.domains),
+        "domains": decision.domains,
+        "routing": decision.state(),
+        "routing_stop": decision.stop_answer,
+        "temporal_context": state.get("temporal_context")
+        or build_temporal_context(user_text, state.get("history")),
+    }
 
 
 async def _get_all_tools() -> list:
@@ -423,6 +296,8 @@ async def _handle_error(state: AgentState) -> dict:
 
 def _should_error(state: AgentState) -> str:
     """路由：有 error 则进入兜底，否则继续。"""
+    if state.get("routing_stop"):
+        return "routing_result"
     if state.get("error"):
         return "error"
     return "management" if state.get("intent") == "management" else "agent"
@@ -434,6 +309,8 @@ async def _build_graph(checkpointer=None):
     graph = StateGraph(AgentState)
 
     graph.add_node("classify_intent", _classify_intent)
+    graph.add_node("routing_result", intent_router.routing_result_node)
+    graph.add_edge("routing_result", END)
     graph.add_node("agent", _agent_node)
     graph.add_node("tools", ToolNode(tools, awrap_tool_call=_guard_date_call))
     graph.add_node("reserve_tools", _reserve_tool_calls)
@@ -446,7 +323,12 @@ async def _build_graph(checkpointer=None):
     graph.add_conditional_edges(
         "classify_intent",
         _should_error,
-        {"error": "handle_error", "agent": "agent", "management": "prepare_action"},
+        {
+            "routing_result": "routing_result",
+            "error": "handle_error",
+            "agent": "agent",
+            "management": "prepare_action",
+        },
     )
     # 核心工具循环：agent -> tools -> agent（直到无 tool_calls 才 END）
     graph.add_conditional_edges(
@@ -507,6 +389,9 @@ def _build_initial_state(
         "messages": messages,
         "memory_context": memory_context,
         "intent": "",
+        "domains": [],
+        "routing": {},
+        "routing_stop": "",
         "answer": "",
         "error": "",
         "approval_id": "",
@@ -595,7 +480,7 @@ async def chat_stream(
     用 LangGraph 的 astream(stream_mode="messages") 获取增量消息，
     每个 AIMessageChunk 的 content 作为一段 token 推送。
 
-    multi 模式下先算一次领域（关键词命中时零成本），
+    multi 模式下先算一次向量领域路由，
     既用于推意图、也传给多智能体避免重复路由。
     """
     if approval_service.is_management_request(user_input):
@@ -608,12 +493,14 @@ async def chat_stream(
         yield {"type": "done"}
         return
     if use_multi_agent():
-        domains = await multi_agent.plan_domains(user_input, history=history)
+        routing = await multi_agent.plan_routing(user_input, history=history)
+        domains = routing["domains"]
         yield {"type": "intent", "intent": multi_agent.to_legacy_intent(domains)}
         async for event in multi_agent.chat_multi_stream(
             user_input,
             user_id,
             domains,
+            routing=routing,
             history=history,
             **({"memory_context": memory_context} if memory_context else {}),
         ):
@@ -627,10 +514,17 @@ async def chat_stream(
         ag, graph_input, kwargs = await checkpoint_service.graph_and_input(
             _build_graph, _get_agent, initial, ("messages",)
         )
-        # 先跑一次意图识别（轻量，单次 LLM 调用），拿到 intent
-        intent_state = await _classify_intent(initial)
-        final_intent = intent_state.get("intent", "chat")
-        yield {"type": "intent", "intent": final_intent}
+        # Fresh SSE input is classified once; the graph reuses this checkpointed decision.
+        # On resume, let pending graph nodes use their saved routing and date anchor.
+        if graph_input is not None:
+            intent_state = await _classify_intent(initial)
+            graph_input.update(intent_state)
+            final_intent = intent_state["intent"]
+            yield {"type": "intent", "intent": final_intent}
+        elif context := checkpoint_service.current():
+            saved = await ag.aget_state(context.config)
+            final_intent = saved.values.get("intent", "other")
+            yield {"type": "intent", "intent": final_intent}
         # Dated answers remain buffered until date/evidence verification finishes.
         context = initial["temporal_context"]
         buffered = bool(context.get("dates") or context.get("unresolved") or graph_input is None)
@@ -639,11 +533,17 @@ async def chat_stream(
             graph_input, stream_mode=["messages", "updates"], **kwargs
         ):
             if mode == "updates":
-                for name in ("agent", "verify_dates", "handle_error", "handle_tool_limit"):
+                for name in (
+                    "agent",
+                    "verify_dates",
+                    "handle_error",
+                    "handle_tool_limit",
+                    "routing_result",
+                ):
                     update = chunk.get(name) or {}
                     if update.get("answer"):
                         final_answer = update["answer"]
-                        if name == "handle_tool_limit" and not buffered:
+                        if name in {"handle_tool_limit", "routing_result"} and not buffered:
                             yield {"type": "token", "content": final_answer}
                 continue
             msg_chunk = chunk[0] if isinstance(chunk, tuple) else chunk

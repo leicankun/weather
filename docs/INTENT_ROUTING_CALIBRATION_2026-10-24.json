@@ -1,0 +1,597 @@
+{
+  "date": "2026-10-24T14:09:10.802223+08:00",
+  "embedding_model": "embedding-3",
+  "dimension": 1024,
+  "threshold": 0.6,
+  "multi_margin": 0.08,
+  "corpus_sha256": "443177c79d56461769ac918a5ded4ed01f65b8212f51bfef92c5661e851c9755",
+  "passed": 15,
+  "total": 23,
+  "cases": [
+    {
+      "question": "广州明日降雨概率高不高？",
+      "history": [],
+      "expected": [
+        "weather"
+      ],
+      "domains": [
+        "weather",
+        "itinerary"
+      ],
+      "scores": {
+        "weather": 0.72966,
+        "outfit": 0.635879,
+        "route": 0.606832,
+        "itinerary": 0.731781,
+        "knowledge": 0.634097,
+        "general": 0.596253,
+        "followup": 0.666438,
+        "ignore": 0.584483
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": false,
+      "duration_ms": 3674
+    },
+    {
+      "question": "周日去深圳会不会很热？",
+      "history": [],
+      "expected": [
+        "weather"
+      ],
+      "domains": [
+        "weather",
+        "outfit",
+        "itinerary"
+      ],
+      "scores": {
+        "weather": 0.72802,
+        "outfit": 0.694435,
+        "route": 0.630799,
+        "itinerary": 0.694662,
+        "knowledge": 0.598976,
+        "general": 0.592484,
+        "followup": 0.700362,
+        "ignore": 0.60329
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": false,
+      "duration_ms": 2007
+    },
+    {
+      "question": "这周末能把被子拿出去晾吗？",
+      "history": [],
+      "expected": [
+        "weather"
+      ],
+      "domains": [
+        "weather"
+      ],
+      "scores": {
+        "weather": 0.809355,
+        "outfit": 0.66267,
+        "route": 0.615167,
+        "itinerary": 0.638898,
+        "knowledge": 0.577252,
+        "general": 0.599822,
+        "followup": 0.673521,
+        "ignore": 0.64102
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": true,
+      "duration_ms": 2035
+    },
+    {
+      "question": "明早出门背包要放雨具吗？",
+      "history": [],
+      "expected": [
+        "weather"
+      ],
+      "domains": [
+        "weather",
+        "itinerary"
+      ],
+      "scores": {
+        "weather": 0.751007,
+        "outfit": 0.668963,
+        "route": 0.666893,
+        "itinerary": 0.702587,
+        "knowledge": 0.589487,
+        "general": 0.563345,
+        "followup": 0.62812,
+        "ignore": 0.646672
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": false,
+      "duration_ms": 4857
+    },
+    {
+      "question": "早晚温差大，薄衬衫加开衫合适吗？",
+      "history": [],
+      "expected": [
+        "weather",
+        "outfit"
+      ],
+      "domains": [
+        "weather",
+        "outfit"
+      ],
+      "scores": {
+        "weather": 0.70251,
+        "outfit": 0.752553,
+        "route": 0.602187,
+        "itinerary": 0.619259,
+        "knowledge": 0.589154,
+        "general": 0.664975,
+        "followup": 0.63206,
+        "ignore": 0.653064
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": true,
+      "duration_ms": 2832
+    },
+    {
+      "question": "去白云山徒步选什么鞋和衣服比较舒服？",
+      "history": [],
+      "expected": [
+        "weather",
+        "outfit"
+      ],
+      "domains": [
+        "weather",
+        "outfit",
+        "route"
+      ],
+      "scores": {
+        "weather": 0.582917,
+        "outfit": 0.724403,
+        "route": 0.677005,
+        "itinerary": 0.624644,
+        "knowledge": 0.638423,
+        "general": 0.541844,
+        "followup": 0.53684,
+        "ignore": 0.570002
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": false,
+      "duration_ms": 1208
+    },
+    {
+      "question": "南站到沙面坐什么车方便？",
+      "history": [],
+      "expected": [
+        "route"
+      ],
+      "domains": [
+        "route"
+      ],
+      "scores": {
+        "weather": 0.545869,
+        "outfit": 0.576974,
+        "route": 0.74258,
+        "itinerary": 0.623588,
+        "knowledge": 0.575867,
+        "general": 0.56401,
+        "followup": 0.583657,
+        "ignore": 0.551725
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": true,
+      "duration_ms": 2879
+    },
+    {
+      "question": "机场过去乘地铁好还是叫车好？",
+      "history": [],
+      "expected": [
+        "route"
+      ],
+      "domains": [
+        "route"
+      ],
+      "scores": {
+        "weather": 0.578084,
+        "outfit": 0.565213,
+        "route": 0.739864,
+        "itinerary": 0.624687,
+        "knowledge": 0.555542,
+        "general": 0.562096,
+        "followup": 0.581134,
+        "ignore": 0.570773
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": true,
+      "duration_ms": 2030
+    },
+    {
+      "question": "我下周已保存了哪些活动？",
+      "history": [],
+      "expected": [
+        "itinerary"
+      ],
+      "domains": [
+        "itinerary"
+      ],
+      "scores": {
+        "weather": 0.613715,
+        "outfit": 0.520496,
+        "route": 0.611559,
+        "itinerary": 0.774214,
+        "knowledge": 0.659522,
+        "general": 0.583593,
+        "followup": 0.613912,
+        "ignore": 0.596604
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": true,
+      "duration_ms": 3708
+    },
+    {
+      "question": "给我设计一份广州四日游的安排",
+      "history": [],
+      "expected": [
+        "itinerary"
+      ],
+      "domains": [
+        "route",
+        "itinerary",
+        "knowledge"
+      ],
+      "scores": {
+        "weather": 0.569082,
+        "outfit": 0.638633,
+        "route": 0.709417,
+        "itinerary": 0.754803,
+        "knowledge": 0.67603,
+        "general": 0.543627,
+        "followup": 0.562028,
+        "ignore": 0.579318
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": false,
+      "duration_ms": 2858
+    },
+    {
+      "question": "我传过的那份游记提到集合地点了吗？",
+      "history": [],
+      "expected": [
+        "itinerary"
+      ],
+      "domains": [
+        "route",
+        "itinerary"
+      ],
+      "scores": {
+        "weather": 0.598671,
+        "outfit": 0.54879,
+        "route": 0.703542,
+        "itinerary": 0.739689,
+        "knowledge": 0.628388,
+        "general": 0.6347,
+        "followup": 0.674436,
+        "ignore": 0.650719
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": false,
+      "duration_ms": 1203
+    },
+    {
+      "question": "哪里能吃到比较地道的早茶？",
+      "history": [],
+      "expected": [
+        "knowledge"
+      ],
+      "domains": [
+        "route",
+        "knowledge"
+      ],
+      "scores": {
+        "weather": 0.51433,
+        "outfit": 0.540921,
+        "route": 0.60027,
+        "itinerary": 0.578037,
+        "knowledge": 0.603524,
+        "general": 0.539286,
+        "followup": 0.564933,
+        "ignore": 0.511809
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": false,
+      "duration_ms": 3661
+    },
+    {
+      "question": "长隆现在入场要多少钱？",
+      "history": [],
+      "expected": [
+        "knowledge"
+      ],
+      "domains": [
+        "knowledge"
+      ],
+      "scores": {
+        "weather": 0.578135,
+        "outfit": 0.585669,
+        "route": 0.635784,
+        "itinerary": 0.620704,
+        "knowledge": 0.718765,
+        "general": 0.571563,
+        "followup": 0.596053,
+        "ignore": 0.538979
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": true,
+      "duration_ms": 2014
+    },
+    {
+      "question": "沙面有哪些值得看的老建筑？",
+      "history": [],
+      "expected": [
+        "knowledge"
+      ],
+      "domains": [
+        "knowledge"
+      ],
+      "scores": {
+        "weather": 0.49655,
+        "outfit": 0.528199,
+        "route": 0.5456,
+        "itinerary": 0.543805,
+        "knowledge": 0.600229,
+        "general": 0.515346,
+        "followup": 0.521137,
+        "ignore": 0.486218
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": true,
+      "duration_ms": 3163
+    },
+    {
+      "question": "明天广州下不下雨，坐什么车去白云山？",
+      "history": [],
+      "expected": [
+        "weather",
+        "route"
+      ],
+      "domains": [
+        "weather",
+        "route",
+        "itinerary"
+      ],
+      "scores": {
+        "weather": 0.776558,
+        "outfit": 0.66005,
+        "route": 0.810334,
+        "itinerary": 0.734857,
+        "knowledge": 0.698226,
+        "general": 0.592926,
+        "followup": 0.713174,
+        "ignore": 0.620502
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": false,
+      "duration_ms": 2790
+    },
+    {
+      "question": "去广州塔的衣服怎么搭配、公共交通如何坐？",
+      "history": [],
+      "expected": [
+        "weather",
+        "outfit",
+        "route"
+      ],
+      "domains": [
+        "weather",
+        "outfit",
+        "route"
+      ],
+      "scores": {
+        "weather": 0.583019,
+        "outfit": 0.843041,
+        "route": 0.810093,
+        "itinerary": 0.624953,
+        "knowledge": 0.688928,
+        "general": 0.596276,
+        "followup": 0.59697,
+        "ignore": 0.592104
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": true,
+      "duration_ms": 1977
+    },
+    {
+      "question": "早上好，很高兴认识你",
+      "history": [],
+      "expected": [],
+      "domains": [],
+      "scores": {
+        "weather": 0.654651,
+        "outfit": 0.638439,
+        "route": 0.64419,
+        "itinerary": 0.629165,
+        "knowledge": 0.631873,
+        "general": 0.775366,
+        "followup": 0.671117,
+        "ignore": 0.654679
+      },
+      "status": "general",
+      "inherited": false,
+      "passed": true,
+      "duration_ms": 3762
+    },
+    {
+      "question": "非常感谢，先聊到这儿",
+      "history": [],
+      "expected": [],
+      "domains": [],
+      "scores": {
+        "weather": 0.600903,
+        "outfit": 0.603388,
+        "route": 0.656481,
+        "itinerary": 0.655933,
+        "knowledge": 0.590494,
+        "general": 0.803767,
+        "followup": 0.746691,
+        "ignore": 0.722445
+      },
+      "status": "general",
+      "inherited": false,
+      "passed": true,
+      "duration_ms": 5710
+    },
+    {
+      "question": "请介绍一下你能帮我做哪些事情",
+      "history": [],
+      "expected": [],
+      "domains": [],
+      "scores": {
+        "weather": 0.555635,
+        "outfit": 0.579059,
+        "route": 0.652721,
+        "itinerary": 0.660561,
+        "knowledge": 0.601066,
+        "general": 0.728178,
+        "followup": 0.673152,
+        "ignore": 0.579691
+      },
+      "status": "general",
+      "inherited": false,
+      "passed": true,
+      "duration_ms": 1231
+    },
+    {
+      "question": "那后天呢？",
+      "history": [
+        {
+          "role": "user",
+          "content": "广州明天天气如何？"
+        }
+      ],
+      "expected": [
+        "weather"
+      ],
+      "domains": [
+        "weather"
+      ],
+      "scores": {
+        "weather": 0.742143,
+        "outfit": 0.669556,
+        "route": 0.679438,
+        "itinerary": 0.802073,
+        "knowledge": 0.626032,
+        "general": 0.667889,
+        "followup": 0.922372,
+        "ignore": 0.642906
+      },
+      "status": "matched",
+      "inherited": true,
+      "passed": true,
+      "duration_ms": 4895
+    },
+    {
+      "question": "换成深圳呢？",
+      "history": [
+        {
+          "role": "user",
+          "content": "广州明天天气如何？"
+        }
+      ],
+      "expected": [
+        "weather"
+      ],
+      "domains": [
+        "weather"
+      ],
+      "scores": {
+        "weather": 0.616779,
+        "outfit": 0.57032,
+        "route": 0.654627,
+        "itinerary": 0.640426,
+        "knowledge": 0.587611,
+        "general": 0.642509,
+        "followup": 0.867107,
+        "ignore": 0.641978
+      },
+      "status": "matched",
+      "inherited": true,
+      "passed": true,
+      "duration_ms": 5741
+    },
+    {
+      "question": "那后天呢？",
+      "history": [
+        {
+          "role": "user",
+          "content": "明天去广州塔穿什么、怎么走"
+        }
+      ],
+      "expected": [
+        "weather",
+        "outfit",
+        "route"
+      ],
+      "domains": [
+        "weather",
+        "outfit",
+        "route"
+      ],
+      "scores": {
+        "weather": 0.742143,
+        "outfit": 0.669556,
+        "route": 0.679438,
+        "itinerary": 0.802073,
+        "knowledge": 0.626032,
+        "general": 0.667889,
+        "followup": 0.922372,
+        "ignore": 0.642906
+      },
+      "status": "matched",
+      "inherited": true,
+      "passed": true,
+      "duration_ms": 3406
+    },
+    {
+      "question": "广州有什么特色小吃？",
+      "history": [
+        {
+          "role": "user",
+          "content": "广州明天天气如何？"
+        }
+      ],
+      "expected": [
+        "knowledge"
+      ],
+      "domains": [
+        "knowledge"
+      ],
+      "scores": {
+        "weather": 0.533455,
+        "outfit": 0.546842,
+        "route": 0.569308,
+        "itinerary": 0.572557,
+        "knowledge": 0.835724,
+        "general": 0.532507,
+        "followup": 0.516463,
+        "ignore": 0.428019
+      },
+      "status": "matched",
+      "inherited": false,
+      "passed": true,
+      "duration_ms": 2592
+    }
+  ],
+  "http": []
+}

@@ -12,7 +12,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.models.user import User
-from app.services import chat_history_service, multi_agent
+from app.services import chat_history_service, intent_router, multi_agent
 
 
 class HistoryModel(GenericFakeChatModel):
@@ -47,12 +47,14 @@ def multi_model(monkeypatch):
     async def tools():
         return {}
 
-    async def route(*args, **kwargs):
-        model.route_prompts.append(args[0])
-        return multi_agent.DomainChoice(domains=[])
+    original_route = intent_router.identify_intent
+
+    async def route(question, history=None):
+        model.route_prompts.append((question, history))
+        return await original_route(question, history)
 
     monkeypatch.setattr(multi_agent, "load_domain_tools", tools)
-    monkeypatch.setattr(multi_agent, "ainvoke_json", route)
+    monkeypatch.setattr(intent_router, "identify_intent", route)
     yield model
     multi_agent.reset_cache()
 
@@ -88,8 +90,8 @@ async def test_多智能体两轮对话从数据库读取上下文(
     if follow_up == "继续":
         # 空路由也须复用，避免流式转发节点与重新路由的结果不一致。
         assert len(multi_model.route_prompts) == 1
-        assert first in multi_model.route_prompts[0]
-        assert multi_model.route_prompts[0].endswith("本次问题：继续")
+        assert multi_model.route_prompts[0][0] == "继续"
+        assert multi_model.route_prompts[0][1][0]["content"] == first
     for messages in multi_model.calls:
         assert [message.type for message in messages] == ["system", "human", "ai", "human"]
         assert messages[1].content == first
