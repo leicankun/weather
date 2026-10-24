@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     MEMORY_HISTORY_CHARS: int = Field(default=3500, ge=500, le=10000)
     MEMORY_TIMEOUT: float = Field(default=20.0, gt=0, le=60)
     MEMORY_BACKFILL_BATCH: int = Field(default=30, ge=1, le=100)
+    # 是否检索历史由真实示例向量判断，分数不是概率。
+    MEMORY_RECALL_THRESHOLD: float = Field(default=0.62, ge=0, le=1, allow_inf_nan=False)
+    MEMORY_RECALL_CONTEXT_TURNS: int = Field(default=3, ge=1, le=10)
+    MEMORY_RECALL_TIMEOUT: float = Field(default=20, gt=0, le=60, allow_inf_nan=False)
 
     # ===== 多模态（对话支持图片/语音/文件）=====
     # 图片必须走视觉模型，所以单独配置：本项目的默认对话模型 deepseek-chat 是纯文本，

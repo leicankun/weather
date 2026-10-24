@@ -1,0 +1,407 @@
+{
+  "date": "2026-10-24T14:47:18.191748+08:00",
+  "suite": "acceptance",
+  "model": "embedding-3",
+  "dimension": 1024,
+  "threshold": 0.62,
+  "corpus_sha256": "8109d5abfca41a2511ff44bcbc9c4315c07d7398f00711e4b4e5abf997ff94ee",
+  "passed": 20,
+  "total": 20,
+  "cases": [
+    {
+      "question": "咱们当时商量去吃饭的地方叫什么来着？",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "咱们当时商量去吃饭的地方叫什么来着？",
+      "history_only": true,
+      "status": "matched",
+      "scores": {
+        "history": 0.790834,
+        "mixed": 0.656942,
+        "current": 0.61992,
+        "followup": 0.638824
+      },
+      "passed": true
+    },
+    {
+      "question": "我常去的那间早茶店是哪家？",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "我常去的那间早茶店是哪家？",
+      "history_only": true,
+      "status": "matched",
+      "scores": {
+        "history": 0.680028,
+        "mixed": 0.547484,
+        "current": 0.60892,
+        "followup": 0.555576
+      },
+      "passed": true
+    },
+    {
+      "question": "你知道我的忌口有哪些吗？",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "你知道我的忌口有哪些吗？",
+      "history_only": true,
+      "status": "matched",
+      "scores": {
+        "history": 0.752105,
+        "mixed": 0.666678,
+        "current": 0.624273,
+        "followup": 0.647079
+      },
+      "passed": true
+    },
+    {
+      "question": "回顾一下我曾经给你的出游要求",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "回顾一下我曾经给你的出游要求",
+      "history_only": true,
+      "status": "matched",
+      "scores": {
+        "history": 0.758566,
+        "mixed": 0.746232,
+        "current": 0.688778,
+        "followup": 0.663177
+      },
+      "passed": true
+    },
+    {
+      "question": "我告诉你的出发时间还找得到吗？",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "我告诉你的出发时间还找得到吗？",
+      "history_only": true,
+      "status": "matched",
+      "scores": {
+        "history": 0.752008,
+        "mixed": 0.701445,
+        "current": 0.645673,
+        "followup": 0.703294
+      },
+      "passed": true
+    },
+    {
+      "question": "我订的集合点名字忘了，帮忙找找",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "我订的集合点名字忘了，帮忙找找",
+      "history_only": true,
+      "status": "matched",
+      "scores": {
+        "history": 0.675477,
+        "mixed": 0.603307,
+        "current": 0.574899,
+        "followup": 0.555287
+      },
+      "passed": true
+    },
+    {
+      "question": "参考我的饮食偏好，推荐一家粤菜馆",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": false,
+      "need_recall": true,
+      "query": "参考我的饮食偏好，推荐一家粤菜馆",
+      "history_only": false,
+      "status": "matched",
+      "scores": {
+        "history": 0.656962,
+        "mixed": 0.773867,
+        "current": 0.762982,
+        "followup": 0.57005
+      },
+      "passed": true
+    },
+    {
+      "question": "沿用我们聊过的起点，规划去机场的交通",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": false,
+      "need_recall": true,
+      "query": "沿用我们聊过的起点，规划去机场的交通",
+      "history_only": false,
+      "status": "matched",
+      "scores": {
+        "history": 0.729229,
+        "mixed": 0.768604,
+        "current": 0.707365,
+        "followup": 0.646165
+      },
+      "passed": true
+    },
+    {
+      "question": "按我原定的出游日期查询当地天气",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": false,
+      "need_recall": true,
+      "query": "按我原定的出游日期查询当地天气",
+      "history_only": false,
+      "status": "matched",
+      "scores": {
+        "history": 0.689979,
+        "mixed": 0.788226,
+        "current": 0.72786,
+        "followup": 0.67148
+      },
+      "passed": true
+    },
+    {
+      "question": "沙面以前有哪些历史故事？",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.590811,
+        "mixed": 0.44941,
+        "current": 0.668041,
+        "followup": 0.531867
+      },
+      "passed": true
+    },
+    {
+      "question": "历史上最早的天气观测是什么时候？",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.546106,
+        "mixed": 0.528126,
+        "current": 0.620442,
+        "followup": 0.524645
+      },
+      "passed": true
+    },
+    {
+      "question": "记得把今天广州的气温写清楚",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.586068,
+        "mixed": 0.656904,
+        "current": 0.775353,
+        "followup": 0.620906
+      },
+      "passed": true
+    },
+    {
+      "question": "番禺明天有雨吗？",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.561427,
+        "mixed": 0.622881,
+        "current": 0.746714,
+        "followup": 0.703147
+      },
+      "passed": true
+    },
+    {
+      "question": "广州南到机场要多久？",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.573822,
+        "mixed": 0.537953,
+        "current": 0.690996,
+        "followup": 0.585831
+      },
+      "passed": true
+    },
+    {
+      "question": "请介绍一下你可以做什么",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.655287,
+        "mixed": 0.608882,
+        "current": 0.705844,
+        "followup": 0.695317
+      },
+      "passed": true
+    },
+    {
+      "question": "再详细说一下",
+      "history": [
+        {
+          "role": "user",
+          "content": "我给你说的集合时间是几点？"
+        }
+      ],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "前文问题：我给你说的集合时间是几点？\n本次追问：再详细说一下",
+      "history_only": true,
+      "status": "inherited",
+      "scores": {
+        "history": 0.747745,
+        "mixed": 0.670733,
+        "current": 0.701571,
+        "followup": 0.905302
+      },
+      "passed": true
+    },
+    {
+      "question": "那明天呢？",
+      "history": [
+        {
+          "role": "user",
+          "content": "广州明天天气怎么样？"
+        }
+      ],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.656206,
+        "mixed": 0.672001,
+        "current": 0.743849,
+        "followup": 0.962226
+      },
+      "passed": true
+    },
+    {
+      "question": "还有细节吗？",
+      "history": [
+        {
+          "role": "user",
+          "content": "谢谢你"
+        }
+      ],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.721886,
+        "mixed": 0.605765,
+        "current": 0.636482,
+        "followup": 0.905336
+      },
+      "passed": true
+    },
+    {
+      "question": "那后来呢？",
+      "history": [
+        {
+          "role": "assistant",
+          "content": "我上次说过的餐厅叫什么？"
+        }
+      ],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.713535,
+        "mixed": 0.561223,
+        "current": 0.672669,
+        "followup": 0.892608
+      },
+      "passed": true
+    },
+    {
+      "question": "那家餐厅叫什么？",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "那家餐厅叫什么？",
+      "history_only": true,
+      "status": "matched",
+      "scores": {
+        "history": 0.93197,
+        "mixed": 0.589202,
+        "current": 0.699285,
+        "followup": 0.611633
+      },
+      "passed": true
+    }
+  ],
+  "http": [
+    {
+      "mode": "single",
+      "stream": false,
+      "status": 200,
+      "answer": "你之前提到的餐厅是**云舟茶馆**，约在下午三点见（记录于 2026-10-20）。",
+      "searches": 1,
+      "passed": true
+    },
+    {
+      "mode": "single",
+      "stream": true,
+      "status": 200,
+      "answer": "你之前提到的餐厅是「云舟茶馆」，约在下午三点见（记录于 2026-10-20）。",
+      "searches": 1,
+      "passed": true
+    },
+    {
+      "mode": "multi",
+      "stream": false,
+      "status": 200,
+      "answer": "你之前提到的是「云舟茶馆」，约在下午三点见（记录于2026-10-20）。需要我帮你查它附近的天气或路线吗？",
+      "searches": 1,
+      "passed": true
+    },
+    {
+      "mode": "multi",
+      "stream": true,
+      "status": 200,
+      "answer": "你之前提到的是「云舟茶馆」，约在下午三点见。需要我帮你查它附近的天气或路线吗？",
+      "searches": 1,
+      "passed": true
+    }
+  ],
+  "http_scope": "Real Embedding/LLM/graphs; synthetic authentication and memory repository; no PostgreSQL writes"
+}

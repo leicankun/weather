@@ -49,9 +49,9 @@ def multi_model(monkeypatch):
 
     original_route = intent_router.identify_intent
 
-    async def route(question, history=None):
+    async def route(question, history=None, **kwargs):
         model.route_prompts.append((question, history))
-        return await original_route(question, history)
+        return await original_route(question, history, **kwargs)
 
     monkeypatch.setattr(multi_agent, "load_domain_tools", tools)
     monkeypatch.setattr(intent_router, "identify_intent", route)

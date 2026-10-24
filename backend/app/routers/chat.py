@@ -183,7 +183,7 @@ async def chat(body: ChatRequest, current: OptionalUser = None) -> dict:
         ):
             history = await chat_summary_service.get_context(user_id, conversation_id)
             memory_context = await memory_service.prepare_context(
-                user_id, conversation_id, body.message
+                user_id, conversation_id, body.message, history=history
             )
             memory_kwargs = {"memory_context": memory_context} if memory_context else {}
             result = (
@@ -241,7 +241,7 @@ async def chat_stream(body: ChatRequest, current: OptionalUser = None):
             ) as ctx:
                 history = await chat_summary_service.get_context(user_id, conversation_id)
                 memory_context = await memory_service.prepare_context(
-                    user_id, conversation_id, body.message
+                    user_id, conversation_id, body.message, history=history
                 )
                 memory_kwargs = {"memory_context": memory_context} if memory_context else {}
                 stream = (

@@ -1,0 +1,328 @@
+{
+  "date": "2026-10-24T14:43:25.006330+08:00",
+  "suite": "calibration",
+  "model": "embedding-3",
+  "dimension": 1024,
+  "threshold": 0.62,
+  "corpus_sha256": "96442ebc28aeb57c8624e3b0d1825685c95ab2a97dcc15dd127651cec5963ab0",
+  "passed": 16,
+  "total": 18,
+  "cases": [
+    {
+      "question": "我原来提过的那间面馆叫什么名字？",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "我原来提过的那间面馆叫什么名字？",
+      "history_only": true,
+      "status": "matched",
+      "scores": {
+        "history": 0.763055,
+        "mixed": 0.594045,
+        "current": 0.607914,
+        "followup": 0.603825
+      },
+      "passed": true
+    },
+    {
+      "question": "那家适合我口味的店叫什么？",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "那家适合我口味的店叫什么？",
+      "history_only": true,
+      "status": "matched",
+      "scores": {
+        "history": 0.768696,
+        "mixed": 0.682144,
+        "current": 0.672503,
+        "followup": 0.612089
+      },
+      "passed": true
+    },
+    {
+      "question": "帮我想想我当时选定的集合地点",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "帮我想想我当时选定的集合地点",
+      "history_only": true,
+      "status": "matched",
+      "scores": {
+        "history": 0.722866,
+        "mixed": 0.699142,
+        "current": 0.575014,
+        "followup": 0.620741
+      },
+      "passed": true
+    },
+    {
+      "question": "我有没有告诉过你我住哪个区？",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "我有没有告诉过你我住哪个区？",
+      "history_only": true,
+      "status": "matched",
+      "scores": {
+        "history": 0.739118,
+        "mixed": 0.602374,
+        "current": 0.615135,
+        "followup": 0.633133
+      },
+      "passed": true
+    },
+    {
+      "question": "我以前不能吃的东西有哪些？",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "我以前不能吃的东西有哪些？",
+      "history_only": true,
+      "status": "matched",
+      "scores": {
+        "history": 0.789458,
+        "mixed": 0.645731,
+        "current": 0.570977,
+        "followup": 0.591607
+      },
+      "passed": true
+    },
+    {
+      "question": "我的旅行预算定的是多少来着？",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "我的旅行预算定的是多少来着？",
+      "history_only": false,
+      "status": "matched",
+      "scores": {
+        "history": 0.708086,
+        "mixed": 0.748161,
+        "current": 0.566929,
+        "followup": 0.612418
+      },
+      "passed": false
+    },
+    {
+      "question": "用我原先说的酒店作为起点，查去白云山的路线",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": false,
+      "need_recall": true,
+      "query": "用我原先说的酒店作为起点，查去白云山的路线",
+      "history_only": false,
+      "status": "matched",
+      "scores": {
+        "history": 0.653559,
+        "mixed": 0.72343,
+        "current": 0.665088,
+        "followup": 0.62198
+      },
+      "passed": true
+    },
+    {
+      "question": "按我平时喜欢的菜系推荐几家新餐馆",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": false,
+      "need_recall": true,
+      "query": "按我平时喜欢的菜系推荐几家新餐馆",
+      "history_only": false,
+      "status": "matched",
+      "scores": {
+        "history": 0.667924,
+        "mixed": 0.788935,
+        "current": 0.759204,
+        "followup": 0.606178
+      },
+      "passed": true
+    },
+    {
+      "question": "延续我们讨论过的安排，看看下周天气适不适合",
+      "history": [],
+      "expected_recall": true,
+      "expected_history_only": false,
+      "need_recall": true,
+      "query": "延续我们讨论过的安排，看看下周天气适不适合",
+      "history_only": false,
+      "status": "matched",
+      "scores": {
+        "history": 0.6671,
+        "mixed": 0.715599,
+        "current": 0.647615,
+        "followup": 0.651025
+      },
+      "passed": true
+    },
+    {
+      "question": "广州历史上有什么著名建筑？",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.529022,
+        "mixed": 0.417532,
+        "current": 0.778063,
+        "followup": 0.495763
+      },
+      "passed": true
+    },
+    {
+      "question": "以前的人是怎么预测天气的？",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "uncertain",
+      "scores": {
+        "history": 0.582448,
+        "mixed": 0.551462,
+        "current": 0.571578,
+        "followup": 0.548131
+      },
+      "passed": true
+    },
+    {
+      "question": "请记得在路线建议里写上耗时",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": true,
+      "query": "请记得在路线建议里写上耗时",
+      "history_only": false,
+      "status": "matched",
+      "scores": {
+        "history": 0.661575,
+        "mixed": 0.734358,
+        "current": 0.683048,
+        "followup": 0.641895
+      },
+      "passed": false
+    },
+    {
+      "question": "广州周日会不会有阵雨？",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.577546,
+        "mixed": 0.569487,
+        "current": 0.726791,
+        "followup": 0.627895
+      },
+      "passed": true
+    },
+    {
+      "question": "给我推荐适合带孩子玩的地方",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.597678,
+        "mixed": 0.599504,
+        "current": 0.657012,
+        "followup": 0.556954
+      },
+      "passed": true
+    },
+    {
+      "question": "再见，非常感谢",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.602947,
+        "mixed": 0.601489,
+        "current": 0.740654,
+        "followup": 0.628539
+      },
+      "passed": true
+    },
+    {
+      "question": "那后来呢？",
+      "history": [
+        {
+          "role": "user",
+          "content": "我上次说过的餐厅叫什么？"
+        }
+      ],
+      "expected_recall": true,
+      "expected_history_only": true,
+      "need_recall": true,
+      "query": "前文问题：我上次说过的餐厅叫什么？\n本次追问：那后来呢？",
+      "history_only": true,
+      "status": "inherited",
+      "scores": {
+        "history": 0.713589,
+        "mixed": 0.561317,
+        "current": 0.672669,
+        "followup": 0.892696
+      },
+      "passed": true
+    },
+    {
+      "question": "那后天呢？",
+      "history": [
+        {
+          "role": "user",
+          "content": "广州明天天气怎么样？"
+        }
+      ],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.671184,
+        "mixed": 0.658378,
+        "current": 0.695596,
+        "followup": 0.962245
+      },
+      "passed": true
+    },
+    {
+      "question": "那后来呢？",
+      "history": [],
+      "expected_recall": false,
+      "expected_history_only": false,
+      "need_recall": false,
+      "query": "",
+      "history_only": false,
+      "status": "not_needed",
+      "scores": {
+        "history": 0.713589,
+        "mixed": 0.561317,
+        "current": 0.672669,
+        "followup": 0.892696
+      },
+      "passed": true
+    }
+  ]
+}

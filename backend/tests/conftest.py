@@ -231,6 +231,53 @@ def _disable_external_rerank(monkeypatch):
     monkeypatch.setattr(settings, "CHECKPOINT_ENABLED", False)
 
 
+@pytest.fixture(autouse=True)
+def recall_embeddings(monkeypatch):
+    """Labelled recall vectors keep memory/API regressions offline."""
+    import re
+
+    from app.services import recall_gate
+
+    labels = tuple(recall_gate.RECALL_EXAMPLES)
+
+    def clean(value):
+        return re.sub(r"[，,。；;！？!?、\s]+", "", value)
+
+    meanings = {
+        clean(value): label
+        for label, values in recall_gate.RECALL_EXAMPLES.items()
+        for value in values
+    }
+    meanings[clean("之前讨论了什么")] = "history"
+
+    class RecallEmbedding:
+        base_url = "fixture://recall"
+        model = "recall-vectors"
+        api_key = "fixture"
+        dim = len(labels) + 1
+        available = True
+        calls: ClassVar[list] = []
+
+        def __init__(self, **kwargs):
+            pass
+
+        async def embed_texts(self, texts, *, allow_fallback=True):
+            assert allow_fallback is False
+            self.calls.append(list(texts))
+            result = []
+            for value in texts:
+                vector = [0.0] * self.dim
+                label = meanings.get(clean(value), "current")
+                vector[labels.index(label)] = 1.0
+                result.append(vector)
+            return result
+
+    recall_gate.recall_gate.reset()
+    monkeypatch.setattr(recall_gate, "EmbeddingClient", RecallEmbedding)
+    yield RecallEmbedding, meanings
+    recall_gate.recall_gate.reset()
+
+
 @pytest_asyncio.fixture
 async def db():
     """直连测试库的会话，用于**直接造数据 / 断言落库结果**。"""

@@ -126,7 +126,9 @@ async def _classify_intent(state: AgentState) -> dict:
     if state.get("routing"):
         return {key: state[key] for key in ("intent", "domains", "routing", "routing_stop")}
     user_text = state["messages"][-1].content
-    decision = await intent_router.identify_intent(user_text, state.get("history"))
+    decision = await intent_router.identify_intent(
+        user_text, state.get("history"), memory_context=state.get("memory_context", "")
+    )
     return {
         "intent": multi_agent.to_legacy_intent(decision.domains),
         "domains": decision.domains,
@@ -493,7 +495,9 @@ async def chat_stream(
         yield {"type": "done"}
         return
     if use_multi_agent():
-        routing = await multi_agent.plan_routing(user_input, history=history)
+        routing = await multi_agent.plan_routing(
+            user_input, history=history, memory_context=memory_context
+        )
         domains = routing["domains"]
         yield {"type": "intent", "intent": multi_agent.to_legacy_intent(domains)}
         async for event in multi_agent.chat_multi_stream(

@@ -63,6 +63,8 @@ setup 会创建 backend/.venv、安装依赖，首次生成 backend/.env 和随�
 
 ## 双层长期记忆
 
+历史回忆已改为真实示例向量触发，复用已有智谱配置，无新增依赖、表或迁移。默认 `MEMORY_RECALL_THRESHOLD=0.62`，上下文回看 3 条用户消息，整个判断最多 20 秒；可选配置见 `.env.example`。更新后重启后端，无需覆盖现有 `.env`。无 Key/故障时跳过详细历史，偏好卡片仍保留；机制与验收见 [MEMORY.md](MEMORY.md)。
+
 双层长期记忆默认开启，复用已配置的对话模型、智谱 Embedding 和百炼重排序；无需新 Key。更新后执行 `./scripts/dev.ps1 migrate` 创建 `0016_chat_memory` 并重启后端。旧聊天可在 `/docs` 登录后调用 `POST /api/v1/memory/backfill` 分批补索引，直到 `has_more=false`。配置、卡片查看和清空方式见 [MEMORY.md](MEMORY.md)。
 
 ## 全容器运行

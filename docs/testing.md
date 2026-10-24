@@ -1,5 +1,7 @@
 # 测试
 
+向量回忆触发：`python -m pytest tests/unit/test_recall_gate.py tests/unit/test_agent_intent.py tests/unit/test_multi_agent.py --no-db -o addopts= -q`；真实 Embedding/LLM + 合成记忆仓库的普通/SSE 验收：`python -m app.scripts.evaluate_recall_gate --suite acceptance --http --output ../docs/RECALL_GATE_ACCEPTANCE_<新名称>.json`。覆盖无旧关键词也回忆、含旧词仍跳过、上下文继承与隔离、故障/空结果区分、纯历史通用回答和保存状态恢复。数据与范围见 [MEMORY.md](MEMORY.md)。
+
 向量意图识别：`python -m pytest tests/unit/test_agent_intent.py tests/unit/test_agent_registry.py tests/unit/test_embedding_strict.py tests/unit/test_multi_agent.py --no-db -o addopts= -q`。覆盖多标签、阈值分差、上下文与话题切换、用户/会话隔离、审批独占、预热并发/失败重建、普通/SSE 一次路由、检查点保存/恢复与新轮重置，以及严格 Embedding 响应校验。真实模型评测：`python -m app.scripts.evaluate_intent_routing --suite acceptance --http --output ../docs/INTENT_ROUTING_ACCEPTANCE_<新名称>.json`；付费模型、匿名真实接口、不写库、不覆盖旧报告。算法与限制见 [INTENT_ROUTING.md](INTENT_ROUTING.md)。
 
 单模式工具预算：`python -m pytest tests/unit/test_agent_tool_budget.py --no-db -o addopts= -q`；PostgreSQL 恢复回归 `tests/api/test_agent_tool_budget_recovery.py`。故意无限调用的模型替身通过真实图及普通/SSE 接口，验证逐工具项计数、批次超限不执行、错误调用消耗额度、正常收尾、会话隔离、检查点恢复与新一轮重置。计数边界见 [AGENT_TOOL_BUDGET.md](AGENT_TOOL_BUDGET.md)。

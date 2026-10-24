@@ -286,7 +286,9 @@ async def run_domain_agent(
     return run
 
 
-async def plan_routing(question: str, history: list[dict] | None = None) -> dict:
+async def plan_routing(
+    question: str, history: list[dict] | None = None, *, memory_context: str = ""
+) -> dict:
     """共用示例向量路由，保留多领域和低分/故障状态供普通与 SSE 图复用。"""
     context = checkpoint_service.current()
     if context and context.resume:
@@ -298,7 +300,7 @@ async def plan_routing(question: str, history: list[dict] | None = None) -> dict
                 "routing": values.get("routing", {}),
                 "routing_stop": values.get("routing_stop", ""),
             }
-    decision = await intent_router.identify_intent(question, history)
+    decision = await intent_router.identify_intent(question, history, memory_context=memory_context)
     return {
         "domains": decision.domains,
         "routing": decision.state(),
@@ -317,7 +319,9 @@ async def _supervisor_node(state: MultiAgentState) -> dict:
         state["question"], state.get("history")
     )
     route = (
-        await plan_routing(state["question"], state.get("history"))
+        await plan_routing(
+            state["question"], state.get("history"), memory_context=state.get("memory_context", "")
+        )
         if state.get("domains") is None
         else {
             key: state.get(key, {} if key == "routing" else "")
@@ -519,7 +523,7 @@ async def chat_multi_stream(
     向量路由需要一次查询 Embedding，首次还需生成示例向量）。
     """
     routing = routing or (
-        await plan_routing(question, history)
+        await plan_routing(question, history, memory_context=memory_context)
         if domains is None
         else {"domains": domains, "routing": {}, "routing_stop": ""}
     )

@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
-import math
 import re
 from dataclasses import asdict, dataclass, field
-from weakref import WeakKeyDictionary
 
 from app.core.config import settings
 from app.services import approval_service
 from app.services.agent_registry import DOMAIN_DEPENDS, DOMAIN_ORDER
 from app.services.embedding_client import EmbeddingClient
 from app.services.intent_examples import INTENT_EXAMPLES
+from app.services.semantic_examples import ExampleVectorIndex
 
 logger = logging.getLogger(__name__)
 UNCERTAIN_ANSWER = "还不能确定你想查询什么，请补充具体问题，例如天气、穿搭、路线、行程或攻略。"
@@ -38,15 +36,6 @@ class IntentDecision:
         )
 
 
-def _normalize(vector: list[float], dim: int) -> tuple[float, ...]:
-    if len(vector) != dim or not all(math.isfinite(x) for x in vector):
-        raise ValueError("Invalid semantic embedding")
-    norm = math.sqrt(sum(x * x for x in vector))
-    if not norm:
-        raise ValueError("Empty semantic embedding")
-    return tuple(x / norm for x in vector)
-
-
 def expand_domains(domains: list[str]) -> list[str]:
     picked = set(domains).intersection(DOMAIN_ORDER)
     for key in list(picked):
@@ -56,41 +45,12 @@ def expand_domains(domains: list[str]) -> list[str]:
 
 class SemanticIntentRouter:
     def __init__(self) -> None:
-        self._cache: dict = {}
-        self._locks: WeakKeyDictionary = WeakKeyDictionary()
+        self.index = ExampleVectorIndex(INTENT_EXAMPLES)
 
     def reset(self) -> None:
-        self._cache.clear()
-        self._locks.clear()
+        self.index.reset()
 
-    async def _examples(self, client: EmbeddingClient) -> list[tuple[str, tuple[float, ...]]]:
-        entries = [(label, text) for label, texts in INTENT_EXAMPLES.items() for text in texts]
-        # Never reuse vectors across model, dimension, endpoint, credentials or corpus changes.
-        key = (
-            client.base_url,
-            client.model,
-            client.dim,
-            hashlib.sha256(client.api_key.encode()).hexdigest(),
-            tuple(entries),
-        )
-        loop = asyncio.get_running_loop()
-        lock = self._locks.setdefault(loop, asyncio.Lock())
-        async with lock:
-            if key not in self._cache:
-                vectors = []
-                for start in range(0, len(entries), settings.EMBED_BATCH_SIZE):
-                    texts = [text for _, text in entries[start : start + settings.EMBED_BATCH_SIZE]]
-                    batch = await client.embed_texts(texts, allow_fallback=False)
-                    if len(batch) != len(texts):
-                        raise ValueError("Incomplete semantic embedding batch")
-                    vectors.extend(_normalize(v, client.dim) for v in batch)
-                # Publish only a fully validated snapshot. Keep at most the current version.
-                self._cache = {
-                    key: list(zip((label for label, _ in entries), vectors, strict=True))
-                }
-            return self._cache[key]
-
-    async def _classify(self, question: str, client, examples) -> IntentDecision:
+    async def _classify(self, question: str, client) -> IntentDecision:
         # Split on punctuation/general conjunctions; no business words select domains.
         clauses = [
             part.strip()
@@ -98,26 +58,13 @@ class SemanticIntentRouter:
             if part.strip()
         ]
         clauses = clauses[:8] or [question]
-        vectors = await client.embed_texts(clauses, allow_fallback=False)
-        if len(vectors) != len(clauses):
-            raise ValueError("Incomplete query embedding batch")
+        clause_scores = await self.index.scores(client, clauses)
         all_scores: dict[str, float] = {}
         picked = set()
         statuses = []
         threshold = settings.INTENT_SIMILARITY_THRESHOLD
         margin = settings.INTENT_MULTI_MARGIN
-        for vector in vectors:
-            query = _normalize(vector, client.dim)
-            similarities: dict[str, list[float]] = {}
-            for label, exemplar in examples:
-                similarities.setdefault(label, []).append(
-                    sum(a * b for a, b in zip(query, exemplar, strict=True))
-                )
-            # Average the two closest examples in each label to reduce single-example outliers.
-            scores = {
-                label: sum(sorted(values, reverse=True)[:2]) / min(2, len(values))
-                for label, values in similarities.items()
-            }
+        for scores in clause_scores:
             for label, score in scores.items():
                 all_scores[label] = max(all_scores.get(label, -1), score)
             best = max(scores, key=scores.get)
@@ -151,8 +98,7 @@ class SemanticIntentRouter:
         client = EmbeddingClient(timeout=settings.INTENT_ROUTING_TIMEOUT)
         if not client.available:
             raise ValueError("Semantic embedding provider is not configured")
-        examples = await self._examples(client)
-        decision = await self._classify(question[:4000], client, examples)
+        decision = await self._classify(question[:4000], client)
         if decision.status != "followup":
             return decision
         # A new explicit topic wins above. A followup inherits the most recent user topic;
@@ -165,7 +111,7 @@ class SemanticIntentRouter:
             text = str(item.get("content", ""))[:2000]
             if not text.strip() or approval_service.is_management_request(text):
                 break
-            prior = await self._classify(text, client, examples)
+            prior = await self._classify(text, client)
             if prior.status == "followup":
                 continue
             if prior.domains:
@@ -196,7 +142,15 @@ class SemanticIntentRouter:
 intent_router = SemanticIntentRouter()
 
 
-async def identify_intent(question: str, history: list[dict] | None = None) -> IntentDecision:
+async def identify_intent(
+    question: str, history: list[dict] | None = None, *, memory_context: str = ""
+) -> IntentDecision:
+    from app.services.memory_service import history_only_question
+
+    if history_only_question(memory_context) and not approval_service.is_management_request(
+        question
+    ):
+        return IntentDecision(status="general")
     return await intent_router.route(question, history)
 
 

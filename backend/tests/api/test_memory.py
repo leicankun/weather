@@ -313,5 +313,7 @@ async def test_空记忆也明确告知模型支持记忆(db, auth_headers, memo
     owner = await db.scalar(select(User.id).where(User.username == "tester"))
     context = await memory_service.prepare_context(owner, "empty", "之前的暗号是什么")
     assert "系统支持跨会话长期记忆" in context
-    assert json.loads(context[context.index("{") :]) == {"cards": [], "history": []}
+    payload = json.loads(context[context.index("{") :])
+    assert payload["cards"] == payload["history"] == []
+    assert payload["recall"]["need_recall"] is True
     assert await memory_service.prepare_context(None, "empty", "之前的暗号是什么") == ""
