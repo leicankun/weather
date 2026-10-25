@@ -198,6 +198,23 @@ def report(directory: Path) -> dict:
         ]
         rows = merge_grades(rows, supplements)
     checks = audit(directory, rows, metadata, dataset)
+    (directory / "merged_semantic_scores.jsonl").write_text(
+        "".join(
+            json.dumps(
+                {
+                    "case_id": row["case_id"],
+                    "repeat": row["repeat"],
+                    "mode": row["mode"],
+                    "quality_source": row.get("quality_source", "runs.jsonl"),
+                    "quality": row["quality"],
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+            for row in rows
+        ),
+        encoding="utf-8",
+    )
     modes = {
         mode: aggregate([r for r in rows if r["mode"] == mode]) for mode in ["single", "multi"]
     }
@@ -329,11 +346,11 @@ def report(directory: Path) -> dict:
             f"{m['answer_returned']}/{m['runs']}",
         ),
         (
-            "完整任务通过（模型语义评分，未完成）",
+            "完整任务通过（原模型语义评分v1）",
             quality_cell(s),
             quality_cell(m),
         ),
-        ("模型语义要点覆盖（未完成）", pct(s["criteria_coverage"]), pct(m["criteria_coverage"])),
+        ("模型语义要点覆盖", pct(s["criteria_coverage"]), pct(m["criteria_coverage"])),
         (
             "已完成模型评分中检出的无依据事实回答数",
             str(s["unsupported_answers"]),
@@ -408,7 +425,7 @@ def report(directory: Path) -> dict:
     ]
     if offline:
         os, om = offline["modes"]["single"], offline["modes"]["multi"]
-        items[1:1] = [
+        items[3:3] = [
             (
                 "全部关键要点满足（离线规则v2，不含全面语义判断）",
                 f"{os['keypoint_passed']}/{os['runs']}（{pct(os['keypoint_pass_rate'])}）",
@@ -432,10 +449,12 @@ def report(directory: Path) -> dict:
         "",
         "参数正确率只检查数据集中明确列出的城市、日期、路线起终点及怕冷偏好等约束，不是全参数语义准确率。工具覆盖允许等价路径：穿搭/路线工具已提供完整天气时无需再单独调用天气；工具返回业务错误仍可算已尝试正确能力，最终是否妥善回答由任务质量判定。模型请求在日期校验或预算处被拒绝的次数另存，不能与实际业务执行混算。",
         "",
-        "## 分场景离线关键要点满足" if offline else "## 分场景任务通过",
+        "## 分场景质量评分",
         "",
-        "| 场景 | 单智能体 | 多智能体 |",
-        "|---|---:|---:|",
+        "| 场景 | 单：模型语义评分 | 多：模型语义评分 | 单：离线要点 | 多：离线要点 |"
+        if offline
+        else "| 场景 | 单智能体 | 多智能体 |",
+        "|---|---:|---:|---:|---:|" if offline else "|---|---:|---:|",
     ]
     names = {
         "weather": "天气",
@@ -450,7 +469,7 @@ def report(directory: Path) -> dict:
         if offline:
             item = result["offline_categories"][category]
             lines.append(
-                f"| {names[category]} | {item['single']['passed']}/{item['single']['runs']} | {item['multi']['passed']}/{item['multi']['runs']} |"
+                f"| {names[category]} | {quality_cell(one)} | {quality_cell(many)} | {item['single']['passed']}/{item['single']['runs']} | {item['multi']['passed']}/{item['multi']['runs']} |"
             )
         else:
             lines.append(f"| {names[category]} | {quality_cell(one)} | {quality_cell(many)} |")
@@ -461,7 +480,7 @@ def report(directory: Path) -> dict:
         "## 评分与统计口径",
         "",
         "- 完整任务通过：全部预设要点满足、回答行为正确、未检出无依据事实或事实冲突；图失败与空回答保留为任务失败。评分基础设施失败视为未知，原始记录中的占位task_success=false不能解释为Agent错误；评分不全时不计算总体质量通过率。",
-        "- 自动评审逐项理由保存在 runs.jsonl。温度0仍不保证绝对可重复，同模型评审也可能偏袒或误判；不得直接称生产准确率。",
+        "- 原33份成功评分保存在runs.jsonl；续评仅对原未知项调用原模型、原JUDGE_PROMPT、原v1评分规则（温度0），追加到supplemental_grades.jsonl。合并后结果见summary.json和trial_metrics.csv，原始推理和原评分文件不改写。温度0仍不保证绝对可重复，同模型评审也可能偏袒或误判；不得直接称生产准确率。",
         "- 耗时包含初始状态构造、真实向量路由、模型工具循环、20ms模拟工具等待及系统原有核验；不含一次性工具清单加载、图构建、示例向量预热和后续评分。未测浏览器延迟、SSE首字、记忆准备/落库或真实外部服务延迟。",
         "- 聊天usage直接取供应商HTTP响应，并与回调记录分别保存；重试逐次保留。Embedding与聊天Token分开，未按未知单价估算人民币。缺失usage不等于零费用。",
         "- 每题重复运行用于观察波动，重复结果不是新增独立题；小题集不计算夸大的显著性，也不等同大规模生产压测。P95用线性插值。",
