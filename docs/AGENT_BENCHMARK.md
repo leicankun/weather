@@ -36,6 +36,18 @@
 
 ## 验证
 
+### 余额恢复后仅补语义评分
+
+补评入口`resume_agent_benchmark_grading.py`验证原题集哈希、原始回答哈希、原模型评分文件哈希、原JUDGE_PROMPT及日期锚点；复用原provider/model、评分温度0与1800输出上限。只选择原`judge_failed`且尚无成功补评分的记录，当前为207份；保留原33份成功评分。不会调用业务工具或重新生成答案。
+
+```powershell
+.\.venv\Scripts\python.exe -m app.scripts.resume_agent_benchmark_grading <结果目录> --plan
+.\.venv\Scripts\python.exe -m app.scripts.resume_agent_benchmark_grading <结果目录> --execute --workers 2
+.\.venv\Scripts\python.exe -m app.scripts.report_agent_benchmark <结果目录>
+```
+
+`--plan`不调用任何API。`--execute`在余额恢复后调用原模型，结果追加到supplemental_grades.jsonl，进度与协议保存在grading_recovery_metadata.json；再次遇到401/402/403立即停止后续请求。原inference.jsonl、runs.jsonl、dataset.json不改写。报告只将成功补评分并入原未知记录，拒绝覆盖原成功评分、未知题目或重复成功补评分；同时保留原失败HTTP尝试及新usage。离线v2分数继续单独列出，不与原v1模型语义分数混用。
+
 2026-10-25推理240/240完成，无图异常。单/多模式必要工具能力144/147、147/147；平均图执行7.63/8.38秒，平均聊天Token7752.3/6092.5。自动语义评分33/240成功后接口余额不足（HTTP 402），207份未完成，不报告完整语义准确率；后续新增了评分熔断并用模拟402验证，没有再调用付费接口测试熔断。
 
 离线脚本`score_agent_benchmark_offline.py`对全部240份回答进行关键要点检查，单114/120、多117/120全部满足；要点覆盖236/252、249/252。这是事后公开的离线v2规则，修正默认起点、只问地铁以及无需雨天理由三处原rubric过严边界，不是原v1模型语义评分。不得解释为全部事实均有来源或无幻觉率。

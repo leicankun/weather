@@ -135,6 +135,41 @@ def audit(directory: Path, rows: list[dict], metadata: dict, dataset: list[dict]
     }
 
 
+def merge_grades(original: list[dict], supplements: list[dict]) -> list[dict]:
+    """Only replace missing semantic grades, never an original successful one."""
+
+    def trial_key(row):
+        return row["case_id"], row["repeat"], row["mode"]
+
+    lookup = {trial_key(row): row for row in original}
+    recovered = {}
+    for entry in supplements:
+        key = trial_key(entry)
+        if key not in lookup or lookup[key]["quality"]["status"] != "judge_failed":
+            raise ValueError("Supplement targets an unknown or already graded original row")
+        if entry["quality"]["status"] != "scored":
+            continue
+        if key in recovered:
+            raise ValueError("Duplicate successful supplemental grade")
+        recovered[key] = entry
+    merged = []
+    for row in original:
+        extra = recovered.get(trial_key(row))
+        if extra:
+            merged.append(
+                {
+                    **row,
+                    "quality": extra["quality"],
+                    "judge_ms": extra["judge_ms"],
+                    "judge_network": [*row.get("judge_network", []), *extra["judge_network"]],
+                    "quality_source": "supplemental_grades.jsonl",
+                }
+            )
+        else:
+            merged.append(row)
+    return merged
+
+
 def report(directory: Path) -> dict:
     metadata = json.loads((directory / "metadata.json").read_text(encoding="utf-8"))
     dataset = json.loads((directory / "dataset.json").read_text(encoding="utf-8"))
@@ -142,6 +177,26 @@ def report(directory: Path) -> dict:
         json.loads(line)
         for line in (directory / "runs.jsonl").read_text(encoding="utf-8").splitlines()
     ]
+    original_rows = rows
+    supplements = []
+    supplement_path = directory / "supplemental_grades.jsonl"
+    if supplement_path.exists():
+        recovery = json.loads(
+            (directory / "grading_recovery_metadata.json").read_text(encoding="utf-8")
+        )
+        for name, filename in [
+            ("inference_sha256", "inference.jsonl"),
+            ("original_runs_sha256", "runs.jsonl"),
+        ]:
+            if (
+                hashlib.sha256((directory / filename).read_bytes()).hexdigest()
+                != recovery["protocol"][name]
+            ):
+                raise ValueError("Original file hash does not match recovery provenance")
+        supplements = [
+            json.loads(line) for line in supplement_path.read_text(encoding="utf-8").splitlines()
+        ]
+        rows = merge_grades(rows, supplements)
     checks = audit(directory, rows, metadata, dataset)
     modes = {
         mode: aggregate([r for r in rows if r["mode"] == mode]) for mode in ["single", "multi"]
@@ -165,7 +220,7 @@ def report(directory: Path) -> dict:
         pairing[
             "both_pass" if s and m else "single_only" if s else "multi_only" if m else "both_fail"
         ] += 1
-    judgment = [c for r in rows for c in r["judge_network"]]
+    judgment = [c for r in [*original_rows, *supplements] for c in r["judge_network"]]
     warmup = json.loads((directory / "warmup.json").read_text(encoding="utf-8"))
     result = {
         "modes": modes,
@@ -244,13 +299,25 @@ def report(directory: Path) -> dict:
 
     if not s["quality_complete"] or not m["quality_complete"]:
         lines[2:2] = [
-            "**完整模型语义评分未完成：评分接口余额不足（HTTP 402），只完成33/240。未评分不能记作Agent答错。另已对全部240份回答完成可复算的离线关键要点检查；它不等于全面事实正确率或无幻觉率。**",
+            f"**完整模型语义评分未完成：当前完成{s['quality_evaluated_runs'] + m['quality_evaluated_runs']}/{len(rows)}，此前评分接口余额不足（HTTP 402）。未评分不能记作Agent答错。另有离线关键要点检查，不能等同全面事实正确率或无幻觉率。**",
             "",
         ]
         metadata.update(
             status="quality_incomplete",
             inference_status="complete",
             quality_status="partial_insufficient_balance",
+            semantic_scored=s["quality_evaluated_runs"] + m["quality_evaluated_runs"],
+            semantic_unscored=s["grading_failures"] + m["grading_failures"],
+        )
+        (directory / "metadata.json").write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    else:
+        metadata.update(
+            status="complete",
+            quality_status="complete_original_model_v1",
+            semantic_scored=len(rows),
+            semantic_unscored=0,
         )
         (directory / "metadata.json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
