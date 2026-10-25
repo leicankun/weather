@@ -83,7 +83,7 @@ class EmbeddingClient:
             )
             return [_local_pseudo_vector(t, self.dim) for t in texts]
 
-        url = f"{self.base_url}/embeddings"
+        url = f"{self.base_url}/embeddings" 
         payload: dict[str, Any] = {
             "model": self.model,
             "input": texts,

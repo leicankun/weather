@@ -327,10 +327,10 @@ async def _build_graph(checkpointer=None):
         _should_error,
         {
             "routing_result": "routing_result",
-            "error": "handle_error",
-            "agent": "agent",
-            "management": "prepare_action",
-        },
+            "error": "handle_error", 
+            "agent": "agent", 
+            "management": "prepare_action"
+         },
     )
     # 核心工具循环：agent -> tools -> agent（直到无 tool_calls 才 END）
     graph.add_conditional_edges(
